@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "repository": "https://github.com/open-telemetry/opentelemetry-js-contrib.git",
+    "branch": "main",
+    "commit": "31b2af9dd5fcc5f96949e5666f8f45b30b997722",
+    "capturedAt": "2026-09-28"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "trace-profile-demo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Self-contained demo for validating tracing and profiling in opentelemetry-js-contrib",
+  "scripts": {
+    "app": "node ./app.js",
+    "receiver": "node ./mock-backend.js",
+    "demo": "node ./run-demo.js"
+  },
+  "engines": {
+    "node": "^18.19.0 || >=20.6.0"
+  },
+  "dependencies": {
+    "@beacon-observability/profiler-nodejs": "file:../../packages/profiler-nodejs",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.213.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
+    "@opentelemetry/instrumentation-http": "^0.213.0",
+    "@opentelemetry/instrumentation-runtime-node": "^0.26.0",
+    "@opentelemetry/resources": "^2.2.0",
+    "@opentelemetry/sdk-metrics": "^2.2.0",
+    "@opentelemetry/sdk-node": "^0.213.0",
+    "@opentelemetry/semantic-conventions": "^1.37.0"
+  }
+}

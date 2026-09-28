@@ -1,0 +1,67 @@
+# Beacon Node.js Development Guide
+
+This repository preserves the complete OpenTelemetry JavaScript Contrib source
+and history and carries isolated Beacon-specific additions. The product and
+cross-language documentation entry point is
+[beacon-observability/beacon](https://github.com/beacon-observability/beacon).
+
+## Status
+
+Beacon Node.js is under development and has no official release or installation
+entry. The repository is based on the latest official upstream `main` commit
+recorded when the project was established. That exact commit, rather than the
+moving branch name, is the reproducible baseline.
+
+The inherited upstream packages and the Beacon-specific profiler have not yet
+completed the full upstream matrix, target Node.js runtime matrix, DataKit
+ingestion acceptance, or release-candidate artifact validation. No package in
+this repository should be presented as a supported Beacon distribution yet.
+
+## Repository Layout
+
+| Location | Purpose |
+| --- | --- |
+| [`packages/`](../packages/) | Inherited OpenTelemetry JavaScript Contrib packages and Beacon-specific packages |
+| [`packages/profiler-nodejs/`](../packages/profiler-nodejs/) | Experimental Beacon Node.js profiling bridge |
+| [`examples/trace-profile-demo/`](../examples/trace-profile-demo/) | Local trace and profiling integration example |
+| [`examples/validation-demo/`](../examples/validation-demo/) | Local OTLP trace validation example |
+| [`beacon/`](./) | Beacon baseline, synchronization, status, and release documentation |
+| [`.github/workflows/`](../.github/workflows/) | Inherited automation, disabled at repository creation pending review |
+
+## Maintenance Entry Points
+
+- [Pinned upstream baseline](upstream.lock.json)
+- [Upstream synchronization](UPSTREAM.md)
+- [Release prerequisites](RELEASING.md)
+- [Profiler package documentation](../packages/profiler-nodejs/README.md)
+
+Development occurs on `main`. Upstream names, package layout, and licenses are
+retained. Beacon-specific capabilities should remain isolated instead of
+renaming inherited packages across the monorepo.
+
+## Current Beacon-Specific Source
+
+The experimental `@beacon-observability/profiler-nodejs` workspace package:
+
+- collects Node.js wall and heap profiles through `@datadog/pprof`;
+- maps OpenTelemetry resource attributes to profiling tags;
+- produces receiver-compatible `pprof` attachments; and
+- can send multipart profile batches to a configured profiling endpoint.
+
+This list identifies source entry points, not validated or released product
+capabilities. The package is marked private until product identity, runtime
+coverage, ingestion compatibility, and release permissions are confirmed.
+
+## Local Validation
+
+Run commands from the repository root unless noted otherwise:
+
+```sh
+npm ci
+npm run compile --workspace=@beacon-observability/profiler-nodejs
+npm test --workspace=@beacon-observability/profiler-nodejs
+```
+
+Full upstream validation requires the matrices and services documented by the
+upstream project. Passing the profiler package tests alone does not validate the
+complete repository or an ingestion backend.

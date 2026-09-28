@@ -79,6 +79,9 @@
     "packages/propagator-ot-trace": {},
     "packages/propagator-aws-xray": {},
     "packages/propagator-aws-xray-lambda": {},
-    "packages/instrumentation-browser-navigation": {}
+    "packages/instrumentation-browser-navigation": {},
+    "packages/profiler-nodejs": {
+      "skip-github-release": true
+    }
   }
 }

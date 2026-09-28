@@ -1,3 +1,12 @@
+# Beacon Node.js
+
+This repository maintains Beacon Node.js on top of the complete OpenTelemetry
+JavaScript Contrib source and history. Beacon-specific development information,
+the adopted upstream baseline, and release status are documented in the
+[Beacon development guide](beacon/README.md).
+
+There is no official Beacon Node.js release yet. Source availability and local
+build results must not be treated as a support or production-readiness claim.
 
 ---
 <p align="center">
@@ -26,7 +35,7 @@
 
 ---
 
-# OpenTelemetry JavaScript Contrib
+## OpenTelemetry JavaScript Contrib
 
 A repository for community-maintained OpenTelemetry JavaScript contributions that are not part of the [core repository](https://github.com/open-telemetry/opentelemetry-js) and core distribution of the API and the SDK.
 
@@ -43,7 +52,7 @@ Please read the [contributing guidelines on adding new instrumentation](CONTRIBU
 
 **Resource Detectors**: OpenTelemetry can collect resource attributes of the entity that is producing telemetry. For example, a process producing telemetry that is running in a container on Kubernetes has a Pod name, it is in a namespace and possibly is part of a Deployment which also has a name. All three of these attributes can be included in the `Resource`.
 
-## Component Ownership
+### Component Ownership
 
 This repository includes various components, each maintained by one or more designated component owners. Unless
 necessary to resolve disagreements, [@open-telemetry/javascript-maintainers](https://github.com/orgs/open-telemetry/teams/javascript-maintainers)
@@ -56,11 +65,11 @@ related to their components, and are the primary contact for conducting PR revie
 Component owners are automatically assigned to pull requests as reviewers. The source of truth for component ownership
 is [.github/component_owners.yml](https://github.com/open-telemetry/opentelemetry-js-contrib/blob/main/.github/component_owners.yml).
 
-## Stability levels
+### Stability levels
 
 Stability levels for components in this repository follow the definitions in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## Supported Runtimes
+### Supported Runtimes
 
 Packages in this repository have a variable range of support for Node.JS and browser versions which for each package depend on
 
@@ -72,23 +81,23 @@ See the `README.md` files and the `engines` field in the `package.json` files fo
 
 See [the support section](https://github.com/open-telemetry/opentelemetry-js#node-support) in the core repository for more general information.
 
-## Contributing
+### Contributing
 
 We'd love your help! Use tags [up-for-grabs][up-for-grabs-issues] and [good first issue][good-first-issues] to get started with the project. Follow [CONTRIBUTING](CONTRIBUTING.md) guide to report issues or submit a proposal.
 
-### Thanks to all the people who already contributed
+#### Thanks to all the people who already contributed
 
 <a href="https://github.com/open-telemetry/opentelemetry-js-contrib/graphs/contributors">
   <img alt="contributors" src="https://contributors-img.web.app/image?repo=open-telemetry/opentelemetry-js-contrib" />
 </a>
 
-## Useful links
+### Useful links
 
 - For more information on OpenTelemetry, visit [OpenTelemetry.io](https://opentelemetry.io/)
 - For help or feedback on this project, join us in [GitHub Discussions][discussions-url] or in [Slack](https://cloud-native.slack.com/archives/C01NL1GRPQR)
 - For more 3rd party components for JS as well as other languages, check [OpenTelemetry Registry](https://opentelemetry.io/registry/)
 
-## License
+### License
 
 Apache 2.0 - See [LICENSE][license-url] for more information.
 
