@@ -3,6 +3,13 @@
 
 ## Unreleased
 
+## 1.1.0 - Unreleased
+
+- Added integration with the `@beacon-observability/nodejs` zero-code preload
+  package.
+- Kept the standalone profiler API and multipart `pprof` format unchanged.
+- Updated the emitted `profiler_version` resource tag to `1.1.0`.
+
 ## 1.0.0 - 2026-09-28
 
 - Published the first public npm package.
