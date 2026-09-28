@@ -61,9 +61,9 @@ implementation of the OpenTelemetry Profiles signal.
 
 ## Programmatic exports
 
-The package re-exports `getNodeAutoInstrumentations`,
-`getResourceDetectors`, `NodeProfiling`, and `HttpProfilingExporter`. Use the
-zero-code register entry point for the supported out-of-the-box setup.
+The package exports `startProfilingFromEnv`, `NodeProfiling`, and
+`HttpProfilingExporter`. Use the zero-code register entry point for the
+supported out-of-the-box auto-instrumentation setup.
 
 ## Runtime support
 

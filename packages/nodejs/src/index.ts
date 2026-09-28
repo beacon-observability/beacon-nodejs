@@ -4,10 +4,6 @@
  */
 
 export {
-  getNodeAutoInstrumentations,
-  getResourceDetectors,
-} from '@opentelemetry/auto-instrumentations-node';
-export {
   HttpProfilingExporter,
   NodeProfiling,
 } from '@beacon-observability/profiler-nodejs';

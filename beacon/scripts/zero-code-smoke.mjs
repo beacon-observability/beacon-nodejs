@@ -228,7 +228,7 @@ async function stagePackage(explicitRegisterPath) {
     [
       '-e',
       `const beacon = require('@beacon-observability/nodejs');
-       const expected = ['HttpProfilingExporter', 'NodeProfiling', 'getNodeAutoInstrumentations', 'getResourceDetectors', 'startProfilingFromEnv'];
+       const expected = ['HttpProfilingExporter', 'NodeProfiling', 'startProfilingFromEnv'];
        const actual = Object.keys(beacon).sort();
        if (JSON.stringify(actual) !== JSON.stringify(expected)) {
          throw new Error('unexpected public exports: ' + actual.join(', '));
