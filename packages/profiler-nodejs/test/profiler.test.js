@@ -17,6 +17,7 @@
 const assert = require('node:assert/strict');
 const { gunzipSync } = require('node:zlib');
 const pprof = require('@datadog/pprof');
+const supportsCPED = Number(process.versions.node.split('.')[0]) >= 22;
 const {
   Function: PprofFunction,
   Line,
@@ -117,7 +118,7 @@ describe('NodeProfiling', () => {
     assert.deepEqual(timeProfileCalls[0], {
       durationMillis: 1_000,
       collectCpuTime: true,
-      useCPED: true,
+      useCPED: supportsCPED,
       withContexts: true,
     });
     assert.deepEqual(
@@ -176,7 +177,7 @@ describe('NodeProfiling', () => {
     assert.deepEqual(timeProfileCalls[0], {
       durationMillis: 1_000,
       collectCpuTime: true,
-      useCPED: true,
+      useCPED: supportsCPED,
       withContexts: true,
     });
   });

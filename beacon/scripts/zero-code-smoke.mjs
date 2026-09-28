@@ -140,7 +140,17 @@ try {
           item.body.includes(Buffer.from('beacon-zero-code-smoke'))
       )
     ) {
-      throw new Error('no compatible multipart profile payload was received');
+      const profileDiagnostics = profileRequests.map(item => ({
+        contentType: item.contentType,
+        bytes: item.body.length,
+        hasWallProfile: item.body.includes(Buffer.from('wall.pprof')),
+        hasEvent: item.body.includes(Buffer.from('event.json')),
+      }));
+      throw new Error(
+        `no compatible multipart profile payload was received: ${JSON.stringify(
+          profileDiagnostics
+        )}\n${errorOutput}`
+      );
     }
 
     console.log(

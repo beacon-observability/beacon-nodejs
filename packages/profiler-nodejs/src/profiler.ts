@@ -33,6 +33,7 @@ const DEFAULT_WALL_DURATION_MILLIS = 10_000;
 const DEFAULT_HEAP_SAMPLING_INTERVAL_BYTES = 512 * 1024;
 const DEFAULT_PROFILE_TYPES: NodeProfileType[] = ['wall', 'heap'];
 const STACK_DEPTH = 64;
+const SUPPORTS_CPED = Number(process.versions.node.split('.')[0]) >= 22;
 
 export class NodeProfiling {
   private readonly exporter: ProfileExporter;
@@ -84,7 +85,7 @@ export class NodeProfiling {
       const wallProfile = await time.profile({
         durationMillis: Math.min(this.wallDurationMillis, this.intervalMillis),
         collectCpuTime: this.collectCpuTime,
-        useCPED: this.collectCpuTime,
+        useCPED: this.collectCpuTime && SUPPORTS_CPED,
         withContexts: this.collectCpuTime,
       });
       rawProfiles.push({ type: 'wall', profile: wallProfile });
