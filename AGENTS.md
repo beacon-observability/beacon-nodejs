@@ -2,6 +2,8 @@
 
 - Always communicate with users in Simplified Chinese.
 - Write Beacon product and development documentation in English.
+- Read `CONTRIBUTING.md` before changing inherited packages, and use
+  `beacon/README.md` for Beacon-specific boundaries and validation entry points.
 - Preserve the complete OpenTelemetry JavaScript Contrib history and layout.
 - Keep Beacon-specific changes isolated, tested, and documented under `beacon/`.
 - Distinguish inherited upstream behavior, implemented Beacon changes, validated
@@ -14,3 +16,5 @@
   reproducible baseline.
 - Review inherited workflows before enabling them. Upstream release automation
   must not publish Beacon artifacts.
+- Run `node beacon/scripts/check-project.mjs`, the affected compile and test
+  commands, and relevant formatting checks before committing Beacon changes.

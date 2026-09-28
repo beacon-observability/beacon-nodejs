@@ -26,12 +26,17 @@ this repository should be presented as a supported Beacon distribution yet.
 | [`examples/trace-profile-demo/`](../examples/trace-profile-demo/) | Local trace and profiling integration example |
 | [`examples/validation-demo/`](../examples/validation-demo/) | Local OTLP trace validation example |
 | [`beacon/`](./) | Beacon baseline, synchronization, status, and release documentation |
-| [`.github/workflows/`](../.github/workflows/) | Inherited automation, disabled at repository creation pending review |
+| [`.github/workflows/beacon-ci.yml`](../.github/workflows/beacon-ci.yml) | Isolated Beacon validation workflow |
+| [`.github/workflows/`](../.github/workflows/) | Inherited automation, disabled in the Beacon repository |
 
 ## Maintenance Entry Points
 
 - [Pinned upstream baseline](upstream.lock.json)
 - [Upstream synchronization](UPSTREAM.md)
+- [Beacon changelog](CHANGELOG.md)
+- [CI and repository checks](CI.md)
+- [Verified Beacon-specific contributors](CONTRIBUTORS.md)
+- [Product version](version.properties)
 - [Release prerequisites](RELEASING.md)
 - [Profiler package documentation](../packages/profiler-nodejs/README.md)
 
@@ -58,6 +63,7 @@ Run commands from the repository root unless noted otherwise:
 
 ```sh
 npm ci
+node beacon/scripts/check-project.mjs
 npm run compile --workspace=@beacon-observability/profiler-nodejs
 npm test --workspace=@beacon-observability/profiler-nodejs
 ```

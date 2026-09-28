@@ -1,0 +1,52 @@
+name: Beacon Node.js CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  profiler:
+    if: github.repository == 'beacon-observability/beacon-nodejs'
+    name: Node.js ${{ matrix.node-version }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['18.19.0', '20', '22', '24']
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Validate Beacon metadata and provenance
+        run: node beacon/scripts/check-project.mjs
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Compile profiler
+        run: npm run compile --workspace=@beacon-observability/profiler-nodejs
+      - name: Test profiler
+        run: npm test --workspace=@beacon-observability/profiler-nodejs
+      - name: Validate repository formatting and package lists
+        if: matrix.node-version == '24'
+        run: |
+          npm run lint:prettier
+          npm run lint:markdown
+          npm run lint:release-please
+      - name: Validate example lockfiles
+        if: matrix.node-version == '24'
+        run: |
+          npm ci --ignore-scripts --prefix examples/trace-profile-demo
+          npm ci --ignore-scripts --prefix examples/validation-demo
