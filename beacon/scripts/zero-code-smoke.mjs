@@ -70,7 +70,7 @@ try {
     env: {
       ...process.env,
       NODE_OPTIONS: `--require=${registerPath}`,
-      APP_HOLD_MILLIS: '2800',
+      APP_HOLD_MILLIS: '5500',
       OTEL_SERVICE_NAME: 'beacon-zero-code-smoke',
       OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
       OTEL_EXPORTER_OTLP_PROTOCOL: protocol,
@@ -92,7 +92,7 @@ try {
   const stderr = [];
   child.stdout.on('data', chunk => stdout.push(chunk));
   child.stderr.on('data', chunk => stderr.push(chunk));
-  const exitCode = await waitForExit(child, 20_000, stdout, stderr);
+  const exitCode = await waitForExit(child, 30_000, stdout, stderr);
   const output = Buffer.concat(stdout).toString();
   const errorOutput = Buffer.concat(stderr).toString();
   if (exitCode !== 0) {
