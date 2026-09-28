@@ -5,9 +5,11 @@ optional Beacon profiler in one package.
 
 ## Install
 
-After version `1.1.0` is published, install it with
-`npm install @beacon-observability/nodejs@1.1.0`. Before publication, use the
-packed source candidate produced by the repository smoke test.
+Install version `1.1.0` with:
+
+```bash
+npm install @beacon-observability/nodejs@1.1.0
+```
 
 ## Zero-code injection
 
