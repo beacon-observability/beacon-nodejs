@@ -8,7 +8,7 @@ read-only repository permissions.
 ## Beacon Matrix
 
 The workflow runs the Beacon project check, installs the committed lockfile,
-and compiles and tests the private profiler workspace on Node.js 18.19, 20, 22,
+and compiles and tests the profiler workspace on Node.js 18.19, 20, 22,
 and 24. The Node.js 24 job also checks repository formatting, Markdown,
 release-please package metadata, and both example lockfiles.
 

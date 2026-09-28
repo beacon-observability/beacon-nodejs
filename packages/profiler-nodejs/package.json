@@ -1,7 +1,6 @@
 {
   "name": "@beacon-observability/profiler-nodejs",
-  "version": "0.1.0",
-  "private": true,
+  "version": "1.0.0",
   "description": "Node.js profiling bridge for OpenTelemetry resource metadata and pprof export",
   "main": "build/src/index.js",
   "types": "build/src/index.d.ts",
@@ -9,6 +8,10 @@
     "type": "git",
     "url": "git+https://github.com/beacon-observability/beacon-nodejs.git",
     "directory": "packages/profiler-nodejs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "clean": "rimraf build/*",
@@ -25,7 +28,7 @@
     "nodejs",
     "pprof"
   ],
-  "author": "OpenTelemetry Authors",
+  "author": "Beacon Observability Authors",
   "license": "Apache-2.0",
   "engines": {
     "node": "^18.19.0 || >=20.6.0"

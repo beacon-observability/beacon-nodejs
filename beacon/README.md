@@ -7,15 +7,16 @@ cross-language documentation entry point is
 
 ## Status
 
-Beacon Node.js `0.1.0` is a GitHub source release. The repository is based on
-the official upstream `main` commit recorded when the project was established.
-That exact commit, rather than the moving branch name, is the reproducible
-baseline.
+Beacon Node.js `1.0.0` is a GitHub source release with a matching public
+`@beacon-observability/profiler-nodejs` package on npm. The repository is based
+on the official upstream `main` commit recorded when the project was
+established. That exact commit, rather than the moving branch name, is the
+reproducible baseline.
 
 The dedicated Beacon checks pass on Node.js 18.19, 20, 22, and 24. The complete
-upstream matrix and receiver compatibility matrix have not been run. The
-Beacon-specific profiler remains private and experimental, and no package in
-this repository is published as a supported Beacon npm distribution.
+upstream matrix and receiver compatibility matrix have not been run. Only the
+Beacon-specific profiler is published by this repository; inherited upstream
+packages retain their own publication lifecycle.
 
 ## Repository Layout
 
@@ -52,9 +53,9 @@ The experimental `@beacon-observability/profiler-nodejs` workspace package:
 - produces receiver-compatible `pprof` attachments; and
 - can send multipart profile batches to a configured profiling endpoint.
 
-This list identifies source entry points, not stable package capabilities. The
-package remains private until its public package identity and receiver
-compatibility have been validated.
+This list identifies the public package entry points. Receiver compatibility
+still depends on the configured endpoint accepting the documented multipart
+`pprof` layout.
 
 ## Local Validation
 

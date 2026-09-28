@@ -7,6 +7,24 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+## 1.0.0 - 2026-09-28
+
+### Public npm release
+
+- Published `@beacon-observability/profiler-nodejs` as the first public Beacon
+  Node.js npm package.
+- Kept inherited OpenTelemetry packages outside the Beacon publication scope.
+- Validated project metadata, clean dependency installation, profiler
+  compilation, six unit tests, package contents, and the declared Node.js CI
+  matrix.
+
+### Known limitations
+
+- The profiler exports the documented compatible multipart `pprof` layout and
+  is not an implementation of the OpenTelemetry Profiles signal.
+- Receiver compatibility depends on the configured profiling endpoint.
+- The complete inherited upstream test matrix is outside this release scope.
+
 ## 0.1.0 - 2026-09-28
 
 ### Initial downstream project

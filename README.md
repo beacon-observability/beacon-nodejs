@@ -5,17 +5,21 @@ the complete OpenTelemetry JavaScript Contrib source tree. This standalone
 downstream repository preserves the official upstream history while maintaining
 Beacon-specific features, tests, versions, and release processes independently.
 
-The current Beacon product version is `0.1.0`. This release fixes a reproducible
-source baseline for Beacon Node.js; it does not republish the inherited
-OpenTelemetry packages or provide a public npm package. Inherited OpenTelemetry
-packages keep their original names, versions, and release lifecycles.
+The current Beacon product version is `1.0.0`. The Beacon-owned profiler is
+available as a public npm package, while inherited OpenTelemetry packages keep
+their original names, versions, and release lifecycles and are not republished
+by Beacon.
 
-The repository currently includes an experimental private
+The repository includes the public
 `@beacon-observability/profiler-nodejs` workspace. It collects Node.js wall and
 heap profiles, maps OpenTelemetry resource attributes to profiling tags, and
 can export receiver-compatible `pprof` payloads. This package is a practical
 profiling bridge and is not an implementation of the OpenTelemetry Profiles
 signal.
+
+```sh
+npm install @beacon-observability/profiler-nodejs@1.0.0
+```
 
 ## Development Resources
 

@@ -55,10 +55,18 @@ check(
   profiler.name === '@beacon-observability/profiler-nodejs',
   'Unexpected profiler package name'
 );
-check(profiler.private === true, 'Profiler must remain private before release');
+check(profiler.private !== true, 'Profiler must be publishable');
 check(
   profiler.version === beaconVersion,
   'Profiler version must match beacon/version.properties'
+);
+check(
+  profiler.publishConfig?.access === 'public',
+  'Profiler package access must be public'
+);
+check(
+  profiler.publishConfig?.registry === 'https://registry.npmjs.org/',
+  'Profiler package must publish to the public npm registry'
 );
 check(
   profiler.repository?.url ===
@@ -108,12 +116,12 @@ check(
   releaseConfig.packages?.['packages/profiler-nodejs']?.[
     'skip-github-release'
   ] === true,
-  'Private profiler must skip GitHub releases'
+  'Beacon profiler must skip inherited GitHub releases'
 );
 const releaseManifest = readJson('.release-please-manifest.json');
 check(
-  releaseManifest['packages/profiler-nodejs'] === undefined,
-  'Private profiler must not appear in the release manifest'
+  releaseManifest['packages/profiler-nodejs'] === profiler.version,
+  'Profiler release manifest version must match package version'
 );
 
 const disallowedTerms = ['guan' + 'ce', 'cloud' + 'care', 'data' + 'kit'];

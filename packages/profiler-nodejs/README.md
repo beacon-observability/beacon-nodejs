@@ -12,12 +12,13 @@ The package:
 
 ## Status
 
-This package is experimental.
+Version `1.0.0` is the first public npm release. Receiver compatibility depends
+on the configured endpoint accepting the multipart layout documented below.
 
 ## Installation
 
 ```sh
-npm install ./packages/profiler-nodejs
+npm install @beacon-observability/profiler-nodejs@1.0.0
 ```
 
 See [USAGE.md](./USAGE.md) for a short module overview, configuration options,
