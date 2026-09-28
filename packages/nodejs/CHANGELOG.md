@@ -3,9 +3,9 @@
 
 ## Unreleased
 
-## 1.1.0 - Unreleased
+## 1.1.0 - 2026-09-28
 
-- Added the first `@beacon-observability/nodejs` product package candidate.
+- Published the first `@beacon-observability/nodejs` product package.
 - Added zero-code Node.js auto-instrumentation through the `register` preload
   entry point and standard OpenTelemetry environment variables.
 - Added opt-in Beacon profiling controlled entirely through environment

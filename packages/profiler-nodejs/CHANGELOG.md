@@ -3,7 +3,7 @@
 
 ## Unreleased
 
-## 1.1.0 - Unreleased
+## 1.1.0 - 2026-09-28
 
 - Added integration with the `@beacon-observability/nodejs` zero-code preload
   package.

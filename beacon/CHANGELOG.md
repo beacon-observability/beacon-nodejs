@@ -7,7 +7,7 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
-## 1.1.0 - Unreleased
+## 1.1.0 - 2026-09-28
 
 ### Zero-code Node.js package
 

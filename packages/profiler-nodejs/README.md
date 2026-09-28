@@ -19,11 +19,8 @@ below.
 ## Installation
 
 ```sh
-npm install @beacon-observability/profiler-nodejs@1.0.0
+npm install @beacon-observability/profiler-nodejs@1.1.0
 ```
-
-Version `1.1.0` remains a source candidate until its npm publication is
-verified.
 
 See [USAGE.md](./USAGE.md) for a short module overview, configuration options,
 defaults, and a minimal setup example.

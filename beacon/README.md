@@ -7,10 +7,9 @@ cross-language documentation entry point is
 
 ## Status
 
-Beacon Node.js `1.1.0` is the current source candidate. It adds the
-`@beacon-observability/nodejs` zero-code package and updates the matching
-`@beacon-observability/profiler-nodejs` component. Publication status is only
-updated after the exact npm versions have been verified. The repository is
+Beacon Node.js `1.1.0` provides the public
+`@beacon-observability/nodejs` zero-code package and the matching
+`@beacon-observability/profiler-nodejs` component on npm. The repository is
 based on the official upstream `main` commit recorded when the project was
 established. That exact commit, rather than the moving branch name, is the
 reproducible baseline.
@@ -66,9 +65,9 @@ The experimental `@beacon-observability/profiler-nodejs` workspace package:
 - produces receiver-compatible `pprof` attachments; and
 - can send multipart profile batches to a configured profiling endpoint.
 
-This list identifies the package entry points in the source candidate. Receiver
-compatibility still depends on the configured endpoint accepting the documented
-multipart `pprof` layout.
+This list identifies the public package entry points. Receiver compatibility
+still depends on the configured endpoint accepting the documented multipart
+`pprof` layout.
 
 ## Local Validation
 
