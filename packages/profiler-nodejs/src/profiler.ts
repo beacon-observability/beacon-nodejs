@@ -66,17 +66,11 @@ export class NodeProfiling {
     }
 
     this.ensureHeapProfiler();
-    this.timer = setInterval(() => {
-      if (this.collecting === undefined) {
-        this.collecting = this.collectOnce()
-          .catch(error => {
-            diag.error('Node profiling collection failed', error);
-          })
-          .finally(() => {
-            this.collecting = undefined;
-          });
-      }
-    }, this.intervalMillis);
+    this.collectInBackground();
+    this.timer = setInterval(
+      () => this.collectInBackground(),
+      this.intervalMillis
+    );
     this.timer.unref?.();
   }
 
@@ -144,5 +138,18 @@ export class NodeProfiling {
 
     heap.start(this.heapSamplingIntervalBytes, STACK_DEPTH);
     this.heapStarted = true;
+  }
+
+  private collectInBackground(): void {
+    if (this.collecting !== undefined) {
+      return;
+    }
+    this.collecting = this.collectOnce()
+      .catch(error => {
+        diag.error('Node profiling collection failed', error);
+      })
+      .finally(() => {
+        this.collecting = undefined;
+      });
   }
 }
