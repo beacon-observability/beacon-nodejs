@@ -7,6 +7,27 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+## 1.1.0 - Unreleased
+
+### Zero-code Node.js package
+
+- Added the `@beacon-observability/nodejs` product package with a
+  `@beacon-observability/nodejs/register` preload entry point.
+- Added zero-code startup through `NODE_OPTIONS` with standard OpenTelemetry
+  environment configuration and automatic Node.js instrumentation.
+- Integrated opt-in wall and heap profiling through the matching
+  `@beacon-observability/profiler-nodejs` component.
+- Added an unchanged HTTP application and release smoke test that verify OTLP
+  HTTP trace export and compatible multipart profile export.
+- Kept inherited OpenTelemetry packages outside the Beacon publication scope.
+
+### Known limitations
+
+- The zero-code release smoke test covers CommonJS preload through
+  `NODE_OPTIONS=--require`; it does not claim complete ESM loader coverage.
+- The profiler layout and receiver limitations documented for 1.0.0 still
+  apply.
+
 ## 1.0.0 - 2026-09-28
 
 ### Public npm release

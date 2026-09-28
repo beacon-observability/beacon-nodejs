@@ -74,6 +74,39 @@ check(
   'Profiler repository URL must point to Beacon Node.js'
 );
 
+const nodejs = readJson('packages/nodejs/package.json');
+check(
+  nodejs.name === '@beacon-observability/nodejs',
+  'Unexpected Beacon Node.js package name'
+);
+check(nodejs.private !== true, 'Beacon Node.js package must be publishable');
+check(
+  nodejs.version === beaconVersion,
+  'Beacon Node.js package version must match beacon/version.properties'
+);
+check(
+  nodejs.publishConfig?.access === 'public',
+  'Beacon Node.js package access must be public'
+);
+check(
+  nodejs.publishConfig?.registry === 'https://registry.npmjs.org/',
+  'Beacon Node.js package must publish to the public npm registry'
+);
+check(
+  nodejs.repository?.url ===
+    'git+https://github.com/beacon-observability/beacon-nodejs.git',
+  'Beacon Node.js repository URL must point to Beacon Node.js'
+);
+check(
+  nodejs.exports?.['./register'] === './build/src/register.js',
+  'Beacon Node.js package must expose the zero-code register entry point'
+);
+check(
+  nodejs.dependencies?.['@beacon-observability/profiler-nodejs'] ===
+    `^${beaconVersion}`,
+  'Beacon Node.js package must use the matching profiler version'
+);
+
 const traceDemo = readJson('examples/trace-profile-demo/package.json');
 check(
   traceDemo.dependencies?.['@beacon-observability/profiler-nodejs'] ===
@@ -118,10 +151,18 @@ check(
   ] === true,
   'Beacon profiler must skip inherited GitHub releases'
 );
+check(
+  releaseConfig.packages?.['packages/nodejs']?.['skip-github-release'] === true,
+  'Beacon Node.js package must skip inherited GitHub releases'
+);
 const releaseManifest = readJson('.release-please-manifest.json');
 check(
   releaseManifest['packages/profiler-nodejs'] === profiler.version,
   'Profiler release manifest version must match package version'
+);
+check(
+  releaseManifest['packages/nodejs'] === nodejs.version,
+  'Beacon Node.js release manifest version must match package version'
 );
 
 const disallowedTerms = ['guan' + 'ce', 'cloud' + 'care', 'data' + 'kit'];

@@ -5,21 +5,36 @@ the complete OpenTelemetry JavaScript Contrib source tree. This standalone
 downstream repository preserves the official upstream history while maintaining
 Beacon-specific features, tests, versions, and release processes independently.
 
-The current Beacon product version is `1.0.0`. The Beacon-owned profiler is
-available as a public npm package, while inherited OpenTelemetry packages keep
-their original names, versions, and release lifecycles and are not republished
-by Beacon.
+The current source candidate is Beacon Node.js `1.1.0`. It adds the
+`@beacon-observability/nodejs` package for zero-code auto-instrumentation and
+optional profiling. This version is not described as published until its npm
+release has been verified. Inherited OpenTelemetry packages keep their
+original names, versions, and release lifecycles and are not republished by
+Beacon.
 
-The repository includes the public
-`@beacon-observability/profiler-nodejs` workspace. It collects Node.js wall and
-heap profiles, maps OpenTelemetry resource attributes to profiling tags, and
-can export receiver-compatible `pprof` payloads. This package is a practical
-profiling bridge and is not an implementation of the OpenTelemetry Profiles
-signal.
+The repository includes the public `@beacon-observability/nodejs` product
+package and `@beacon-observability/profiler-nodejs` profiling component. The
+product package preloads standard OpenTelemetry Node.js auto-instrumentation
+and can optionally collect wall and heap profiles through the profiler. The
+profiling component exports a compatible `pprof` layout and is not an
+implementation of the OpenTelemetry Profiles signal.
+
+After the candidate is published, install it with
+`npm install @beacon-observability/nodejs@1.1.0`. The repository smoke test
+packs and installs the source candidate in an isolated temporary application.
+
+Run an unchanged application through the zero-code preload entry point:
 
 ```sh
-npm install @beacon-observability/profiler-nodejs@1.0.0
+NODE_OPTIONS="--require @beacon-observability/nodejs/register" \
+OTEL_SERVICE_NAME="my-node-service" \
+OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:9529" \
+OTEL_EXPORTER_OTLP_PROTOCOL="http/json" \
+node app.js
 ```
+
+An OTLP/gRPC receiver can instead use `http://127.0.0.1:4317` with
+`OTEL_EXPORTER_OTLP_PROTOCOL=grpc`.
 
 ## Development Resources
 
@@ -30,7 +45,9 @@ npm install @beacon-observability/profiler-nodejs@1.0.0
 - [Release process](beacon/RELEASING.md)
 - [Beacon product changelog](beacon/CHANGELOG.md)
 - [Verified Beacon-specific contributors](beacon/CONTRIBUTORS.md)
+- [Beacon Node.js npm workspace](packages/nodejs/)
 - [Profiler workspace](packages/profiler-nodejs/)
+- [Zero-code injection example](examples/zero-code-demo/)
 - [OTLP trace validation example](examples/validation-demo/)
 - [Contribution guide](CONTRIBUTING.md)
 
@@ -40,18 +57,19 @@ repository root for the maintained Beacon-specific checks:
 ```sh
 node beacon/scripts/check-project.mjs
 npm ci
+npm run compile --workspace=@beacon-observability/nodejs
+npm test --workspace=@beacon-observability/nodejs
 npm run compile --workspace=@beacon-observability/profiler-nodejs
 npm test --workspace=@beacon-observability/profiler-nodejs
+node beacon/scripts/zero-code-smoke.mjs
 ```
 
-The dedicated Beacon CI has passed these checks on Node.js 18.19, 20, 22, and
-24. The Node.js 24 job also validates repository formatting, Markdown, package
-metadata, and example lockfiles. See the
-[initial Beacon CI run](https://github.com/beacon-observability/beacon-nodejs/actions/runs/36390660551)
-for the recorded result.
+The dedicated Beacon CI runs these checks on Node.js 18.19, 20, 22, and 24.
+The Node.js 24 job also validates repository formatting, Markdown, package
+metadata, and example lockfiles.
 
-This CI scope covers Beacon-owned entry points and the profiler workspace. It
-does not replace the complete upstream instrumentation, browser,
+This CI scope covers the Beacon-owned product package, zero-code entry point,
+and profiler workspace. It does not replace the complete upstream browser,
 service-integration, or all-versions matrices. A successful build or test run
 does not constitute profiling receiver compatibility or npm package acceptance.
 

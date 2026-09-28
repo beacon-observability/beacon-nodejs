@@ -80,6 +80,9 @@
     "packages/propagator-aws-xray": {},
     "packages/propagator-aws-xray-lambda": {},
     "packages/instrumentation-browser-navigation": {},
+    "packages/nodejs": {
+      "skip-github-release": true
+    },
     "packages/profiler-nodejs": {
       "skip-github-release": true
     }
