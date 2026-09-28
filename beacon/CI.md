@@ -46,5 +46,15 @@ npm run lint:markdown
 npm run lint:release-please
 ```
 
+The self-contained smoke test uses an ephemeral HTTP port by default. CI sets
+`BEACON_ZERO_CODE_RECEIVER_PORT=9529` to verify the requested fixed HTTP port.
+To exercise an existing local OTLP/gRPC receiver, run:
+
+```sh
+BEACON_ZERO_CODE_EXTERNAL_ENDPOINT=http://127.0.0.1:4317 \
+BEACON_ZERO_CODE_EXTERNAL_PROTOCOL=grpc \
+node beacon/scripts/zero-code-smoke.mjs
+```
+
 Passing CI produces development evidence only. It does not publish artifacts or
 replace runtime, ingestion, performance, upgrade, or rollback acceptance.

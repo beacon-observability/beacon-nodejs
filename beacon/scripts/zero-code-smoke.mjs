@@ -6,13 +6,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
+const externalEndpoint = process.env.BEACON_ZERO_CODE_EXTERNAL_ENDPOINT?.trim();
 const receiverPort = Number(process.env.BEACON_ZERO_CODE_RECEIVER_PORT ?? '0');
 if (
   !Number.isInteger(receiverPort) ||
   receiverPort < 0 ||
   receiverPort > 65535
 ) {
-  throw new Error('BEACON_ZERO_CODE_RECEIVER_PORT must be a valid TCP port');
+  throw new Error(
+    'BEACON_ZERO_CODE_RECEIVER_PORT must be zero or a valid TCP port'
+  );
 }
 const stagedPackage = await stagePackage(process.argv[2]);
 const registerPath = stagedPackage.registerPath;
@@ -28,28 +31,41 @@ if (
 }
 
 const received = [];
-const receiver = http.createServer((request, response) => {
-  const chunks = [];
-  request.on('data', chunk => chunks.push(chunk));
-  request.on('end', () => {
-    received.push({
-      path: request.url,
-      contentType: request.headers['content-type'] ?? '',
-      body: Buffer.concat(chunks),
-    });
-    response.writeHead(200);
-    response.end();
-  });
-});
+const receiver =
+  externalEndpoint === undefined
+    ? http.createServer((request, response) => {
+        const chunks = [];
+        request.on('data', chunk => chunks.push(chunk));
+        request.on('end', () => {
+          received.push({
+            path: request.url,
+            contentType: request.headers['content-type'] ?? '',
+            body: Buffer.concat(chunks),
+          });
+          response.writeHead(200);
+          response.end();
+        });
+      })
+    : undefined;
 
-await listen(receiver, receiverPort);
-const receiverAddress = receiver.address();
-if (receiverAddress === null || typeof receiverAddress === 'string') {
-  throw new Error('unable to determine zero-code receiver port');
+if (receiver !== undefined) {
+  await listen(receiver, receiverPort);
 }
 
 try {
-  const endpoint = `http://127.0.0.1:${receiverAddress.port}`;
+  const receiverAddress = receiver?.address();
+  const endpoint =
+    externalEndpoint ??
+    (receiverAddress !== null && typeof receiverAddress === 'object'
+      ? `http://127.0.0.1:${receiverAddress.port}`
+      : undefined);
+  if (endpoint === undefined) {
+    throw new Error('unable to determine zero-code receiver endpoint');
+  }
+  const usingExternalReceiver = externalEndpoint !== undefined;
+  const protocol = usingExternalReceiver
+    ? process.env.BEACON_ZERO_CODE_EXTERNAL_PROTOCOL?.trim() || 'grpc'
+    : 'http/json';
   const child = spawn(process.execPath, [appPath], {
     env: {
       ...process.env,
@@ -57,14 +73,15 @@ try {
       APP_HOLD_MILLIS: '2800',
       OTEL_SERVICE_NAME: 'beacon-zero-code-smoke',
       OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
-      OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json',
+      OTEL_EXPORTER_OTLP_PROTOCOL: protocol,
       OTEL_TRACES_EXPORTER: 'otlp',
       OTEL_METRICS_EXPORTER: 'none',
       OTEL_LOGS_EXPORTER: 'none',
       OTEL_NODE_ENABLED_INSTRUMENTATIONS: 'http',
       OTEL_NODE_RESOURCE_DETECTORS: 'env,host,os,process,serviceinstance',
       OTEL_BSP_SCHEDULE_DELAY: '100',
-      OTEL_PROFILING_ENABLED: 'true',
+      OTEL_LOG_LEVEL: usingExternalReceiver ? 'debug' : 'info',
+      OTEL_PROFILING_ENABLED: usingExternalReceiver ? 'false' : 'true',
       OTEL_PROFILING_PPROF_UPLOAD_URL: `${endpoint}/profiles`,
       OTEL_PROFILING_EXPORT_INTERVAL: '1',
     },
@@ -87,37 +104,53 @@ try {
     throw new Error(`plain application did not complete\n${output}`);
   }
 
-  const traceRequests = received.filter(item => item.path === '/v1/traces');
-  const traceSummary = summarizeTraces(traceRequests);
-  if (
-    !traceSummary.services.includes('beacon-zero-code-smoke') ||
-    traceSummary.spanNames.length < 2
-  ) {
-    throw new Error(
-      `zero-code trace payload did not contain the expected service and spans: ${JSON.stringify(
-        traceSummary
-      )}`
+  if (usingExternalReceiver) {
+    const diagnostics = `${output}\n${errorOutput}`;
+    if (
+      /(?:ECONNREFUSED|UNAVAILABLE|OTLPExporterError|ECONNRESET|ENOTFOUND)/i.test(
+        diagnostics
+      )
+    ) {
+      throw new Error(`external OTLP export failed\n${diagnostics}`);
+    }
+    console.log(
+      `zero-code external smoke passed on ${endpoint} using ${protocol}`
+    );
+  } else {
+    const traceRequests = received.filter(item => item.path === '/v1/traces');
+    const traceSummary = summarizeTraces(traceRequests);
+    if (
+      !traceSummary.services.includes('beacon-zero-code-smoke') ||
+      traceSummary.spanNames.length < 2
+    ) {
+      throw new Error(
+        `zero-code trace payload did not contain the expected service and spans: ${JSON.stringify(
+          traceSummary
+        )}`
+      );
+    }
+
+    const profileRequests = received.filter(item => item.path === '/profiles');
+    if (
+      !profileRequests.some(
+        item =>
+          item.contentType.includes('multipart/form-data') &&
+          item.body.includes(Buffer.from('wall.pprof')) &&
+          item.body.includes(Buffer.from('event.json')) &&
+          item.body.includes(Buffer.from('beacon-zero-code-smoke'))
+      )
+    ) {
+      throw new Error('no compatible multipart profile payload was received');
+    }
+
+    console.log(
+      `zero-code smoke passed on ${endpoint}: ${traceRequests.length} trace request(s), ${profileRequests.length} profile request(s)`
     );
   }
-
-  const profileRequests = received.filter(item => item.path === '/profiles');
-  if (
-    !profileRequests.some(
-      item =>
-        item.contentType.includes('multipart/form-data') &&
-        item.body.includes(Buffer.from('wall.pprof')) &&
-        item.body.includes(Buffer.from('event.json')) &&
-        item.body.includes(Buffer.from('beacon-zero-code-smoke'))
-    )
-  ) {
-    throw new Error('no compatible multipart profile payload was received');
-  }
-
-  console.log(
-    `zero-code smoke passed on ${endpoint}: ${traceRequests.length} trace request(s), ${profileRequests.length} profile request(s)`
-  );
 } finally {
-  await close(receiver);
+  if (receiver !== undefined) {
+    await close(receiver);
+  }
   await stagedPackage.cleanup();
 }
 

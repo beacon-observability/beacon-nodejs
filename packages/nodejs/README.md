@@ -17,13 +17,14 @@ point:
 ```bash
 export NODE_OPTIONS="--require @beacon-observability/nodejs/register"
 export OTEL_SERVICE_NAME="my-node-service"
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:9529"
-export OTEL_EXPORTER_OTLP_PROTOCOL="http/json"
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4317"
+export OTEL_EXPORTER_OTLP_PROTOCOL="grpc"
 node app.js
 ```
 
-For an OTLP/gRPC receiver on the standard port instead, set the endpoint to
-`http://127.0.0.1:4317` and the protocol to `grpc`.
+For an OTLP/HTTP receiver on port `9529`, set the endpoint to
+`http://127.0.0.1:9529` and select the protocol supported by that receiver,
+such as `http/protobuf` or `http/json`.
 
 The package uses the standard OpenTelemetry Node.js environment variables for
 traces, metrics, logs, propagators, resource attributes, and instrumentation

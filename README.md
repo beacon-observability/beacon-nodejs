@@ -28,13 +28,14 @@ Run an unchanged application through the zero-code preload entry point:
 ```sh
 NODE_OPTIONS="--require @beacon-observability/nodejs/register" \
 OTEL_SERVICE_NAME="my-node-service" \
-OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:9529" \
-OTEL_EXPORTER_OTLP_PROTOCOL="http/json" \
+OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4317" \
+OTEL_EXPORTER_OTLP_PROTOCOL="grpc" \
 node app.js
 ```
 
-An OTLP/gRPC receiver can instead use `http://127.0.0.1:4317` with
-`OTEL_EXPORTER_OTLP_PROTOCOL=grpc`.
+An OTLP/HTTP receiver on `http://127.0.0.1:9529` can be selected with
+`OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf` or `http/json`, according to the
+receiver's supported protocol.
 
 ## Development Resources
 

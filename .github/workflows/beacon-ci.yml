@@ -45,6 +45,8 @@ jobs:
           npm test --workspace=@beacon-observability/nodejs
       - name: Validate zero-code injection
         run: node beacon/scripts/zero-code-smoke.mjs
+        env:
+          BEACON_ZERO_CODE_RECEIVER_PORT: '9529'
       - name: Validate repository formatting and package lists
         if: matrix.node-version == '24'
         run: |
