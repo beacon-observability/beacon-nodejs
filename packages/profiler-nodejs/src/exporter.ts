@@ -17,22 +17,21 @@
 import { diag } from '@opentelemetry/api';
 
 import type {
-  DatakitProfilingExporterOptions,
+  HttpProfilingExporterOptions,
   ProfileBatch,
   ProfileExporter,
 } from './types';
 
-const DEFAULT_ENDPOINT = 'http://127.0.0.1:9529/profiling/v1/input';
 const DEFAULT_TIMEOUT_MILLIS = 30_000;
 
-export class DatakitProfilingExporter implements ProfileExporter {
+export class HttpProfilingExporter implements ProfileExporter {
   private readonly endpoint: string;
   private readonly timeoutMillis: number;
   private readonly headers: Record<string, string>;
   private readonly fetchImpl: typeof fetch;
 
-  constructor(options: DatakitProfilingExporterOptions = {}) {
-    this.endpoint = options.endpoint ?? DEFAULT_ENDPOINT;
+  constructor(options: HttpProfilingExporterOptions) {
+    this.endpoint = options.endpoint;
     this.timeoutMillis = options.timeoutMillis ?? DEFAULT_TIMEOUT_MILLIS;
     this.headers = options.headers ?? {};
     this.fetchImpl = options.fetch ?? globalThis.fetch;
@@ -73,12 +72,12 @@ export class DatakitProfilingExporter implements ProfileExporter {
     if (!response.ok) {
       const body = await safeReadBody(response);
       throw new Error(
-        `datakit profiling export failed: ${response.status} ${response.statusText}${body}`
+        `profiling export failed: ${response.status} ${response.statusText}${body}`
       );
     }
 
     diag.debug(
-      `Datakit profiling export succeeded for ${batch.profiles.length} profile(s)`
+      `Profiling export succeeded for ${batch.profiles.length} profile(s)`
     );
   }
 
@@ -89,8 +88,8 @@ export class DatakitProfilingExporter implements ProfileExporter {
       version: '4',
       profiler: 'ddtrace',
       attachments: batch.profiles.map(profile => profile.filename),
-      start: formatDatakitTimestamp(batch.startTime),
-      end: formatDatakitTimestamp(batch.endTime),
+      start: formatTimestamp(batch.startTime),
+      end: formatTimestamp(batch.endTime),
       family: batch.family,
       format: batch.format,
       tags_profiler: joinTags(batch.tags),
@@ -118,6 +117,6 @@ function joinTags(tags: Record<string, string>): string {
     .join(',');
 }
 
-function formatDatakitTimestamp(date: Date): string {
+function formatTimestamp(date: Date): string {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }

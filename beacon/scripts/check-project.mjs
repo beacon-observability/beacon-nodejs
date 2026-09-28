@@ -116,7 +116,7 @@ check(
   'Private profiler must not appear in the release manifest'
 );
 
-const disallowedTerms = ['guan' + 'ce', 'cloud' + 'care'];
+const disallowedTerms = ['guan' + 'ce', 'cloud' + 'care', 'data' + 'kit'];
 const grepArgs = ['grep', '-I', '-n', '-i'];
 for (const term of disallowedTerms) grepArgs.push('-e', term);
 grepArgs.push('--', '.');

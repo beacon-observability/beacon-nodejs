@@ -38,8 +38,8 @@ export interface ProfileExporter {
   shutdown?(): Promise<void>;
 }
 
-export interface DatakitProfilingExporterOptions {
-  endpoint?: string;
+export interface HttpProfilingExporterOptions {
+  endpoint: string;
   timeoutMillis?: number;
   headers?: Record<string, string>;
   fetch?: typeof fetch;

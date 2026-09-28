@@ -18,7 +18,7 @@
 
 const http = require('http');
 
-const port = Number(process.env.RECEIVER_PORT || 9529);
+const port = Number(process.env.RECEIVER_PORT || 4318);
 const basePath = process.env.RECEIVER_PATH || '/otel';
 const acceptedPaths = new Set([
   normalizePath(basePath),

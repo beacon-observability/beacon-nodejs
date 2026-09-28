@@ -18,7 +18,7 @@ import { diag } from '@opentelemetry/api';
 import { heap, time } from '@datadog/pprof';
 import type { Profile } from 'pprof-format';
 
-import { buildDatakitCompatibleNodeProfiles } from './pprof';
+import { buildCompatibleNodeProfiles } from './pprof';
 import { buildProfilerTags } from './resource';
 import type {
   CollectedProfile,
@@ -107,7 +107,7 @@ export class NodeProfiling {
     }
 
     const profiles: CollectedProfile[] =
-      buildDatakitCompatibleNodeProfiles(rawProfiles);
+      buildCompatibleNodeProfiles(rawProfiles);
 
     const batch: ProfileBatch = {
       startTime,

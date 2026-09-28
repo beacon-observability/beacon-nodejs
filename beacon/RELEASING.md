@@ -1,9 +1,10 @@
-# Release Prerequisites
+# Release Process
 
-Beacon Node.js has no official release process yet. The
-`@beacon-observability/profiler-nodejs` workspace is private and development
-examples use the local workspace package. Do not publish inherited upstream
-packages or the profiler from the current repository state.
+Beacon Node.js publishes fixed GitHub source releases independently from the
+inherited OpenTelemetry package lifecycle. The
+`@beacon-observability/profiler-nodejs` workspace remains private. Do not
+publish inherited upstream packages or the profiler to npm from the current
+repository state.
 
 ## Version Rules
 
@@ -16,22 +17,21 @@ packages or the profiler from the current repository state.
 - Beacon product versions remain independent of inherited OpenTelemetry package
   versions and the pinned upstream commit.
 
-Before an initial release:
+Before a GitHub source release:
 
-1. Confirm package ownership, public names, maintainers, and publication
-   permissions.
-2. Pin the validated upstream commit and all release inputs.
-3. Define the first artifact set and the required or optional relationship
-   between instrumentation and profiling.
-4. Pass the declared Node.js runtime matrix, Beacon-specific regression tests,
-   the relevant upstream matrix, and clean-install tests from candidate
-   artifacts.
-5. Validate telemetry against the actual receiver and document compatible
-   protocols, versions, limitations, and rollback procedures.
-6. Separate ordinary CI permissions from release credentials and adapt or
-   replace inherited release workflows.
-7. Publish immutable artifacts and a fixed source tag, then reinstall from the
-   public channel and repeat acceptance checks.
+1. Pin the adopted upstream commit and all release inputs.
+2. Update `beacon/version.properties`, the private profiler workspace version,
+   lockfiles, and Beacon changelogs together.
+3. Pass the declared Node.js runtime matrix and Beacon-specific regression
+   tests.
+4. Verify that inherited release workflows remain disabled and that the source
+   release does not publish npm artifacts.
+5. Publish an immutable `beacon-vX.Y.Z` source tag and document the validation
+   scope and known limitations in the GitHub Release.
+
+Publishing an npm package requires a separate release plan covering package
+ownership, public naming, clean-install testing, receiver compatibility,
+credentials, rollback, and installation acceptance.
 
 ## Candidate Validation
 
@@ -46,13 +46,13 @@ npm pack --dry-run --workspace=@beacon-observability/profiler-nodejs
 ```
 
 The package remains private, so this command only inspects a local candidate.
-Compilation, tests, or `npm pack` do not constitute publication or ingestion
-acceptance. Record the source commit, dependency lockfile, candidate digest,
-runtime matrix, known limitations, and rollback procedure together.
+Compilation, tests, or `npm pack` do not constitute npm publication or
+receiver acceptance. Record the source commit, dependency lockfile, candidate
+digest, runtime matrix, and known limitations together.
 
 If a tag or artifact differs from the accepted candidate, stop the release and
 use a new version after correcting and revalidating it. Never overwrite a
 published version.
 
-Only after those steps pass should the product repository receive a fixed
-installation guide and GitHub Release link.
+Only publish installation instructions after validating installation from an
+actual public artifact.

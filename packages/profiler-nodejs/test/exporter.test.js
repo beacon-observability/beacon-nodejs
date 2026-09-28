@@ -16,13 +16,13 @@
 
 const assert = require('node:assert/strict');
 
-const { DatakitProfilingExporter } = require('../src/exporter');
+const { HttpProfilingExporter } = require('../src/exporter');
 
-describe('DatakitProfilingExporter', () => {
+describe('HttpProfilingExporter', () => {
   it('sends multipart requests using the compatible ddtrace Node.js layout', async () => {
     let captured;
-    const exporter = new DatakitProfilingExporter({
-      endpoint: 'http://127.0.0.1:9529/profiling/v1/input',
+    const exporter = new HttpProfilingExporter({
+      endpoint: 'http://127.0.0.1:8081/profiles',
       fetch: async (url, init) => {
         captured = { url, init };
         return new Response('', { status: 200 });
@@ -54,7 +54,7 @@ describe('DatakitProfilingExporter', () => {
       ],
     });
 
-    assert.equal(captured.url, 'http://127.0.0.1:9529/profiling/v1/input');
+    assert.equal(captured.url, 'http://127.0.0.1:8081/profiles');
     assert.equal(captured.init.method, 'POST');
 
     const req = new Request(captured.url, captured.init);
@@ -77,7 +77,8 @@ describe('DatakitProfilingExporter', () => {
   });
 
   it('throws for non-2xx responses', async () => {
-    const exporter = new DatakitProfilingExporter({
+    const exporter = new HttpProfilingExporter({
+      endpoint: 'http://127.0.0.1:8081/profiles',
       fetch: async () => new Response('bad request', { status: 400 }),
     });
 
@@ -96,7 +97,7 @@ describe('DatakitProfilingExporter', () => {
           },
         ],
       }),
-      /datakit profiling export failed: 400/
+      /profiling export failed: 400/
     );
   });
 });

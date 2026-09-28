@@ -51,7 +51,7 @@ const EXPORT_DEFINITIONS: ExportDefinition[] = [
   },
 ];
 
-export function buildDatakitCompatibleNodeProfiles(
+export function buildCompatibleNodeProfiles(
   profiles: SourceProfile[]
 ): CollectedProfile[] {
   const byType = new Map<NodeProfileType, Profile>();

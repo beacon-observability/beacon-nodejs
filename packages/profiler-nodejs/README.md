@@ -8,7 +8,7 @@ The package:
 - collects Node.js `wall` and `heap` profiles with `@datadog/pprof`
 - reshapes Node.js profiles into the legacy `ddtrace` file layout expected by the target profiling receiver
 - maps OpenTelemetry resource attributes to profiling tags
-- exports `pprof` payloads to a profiling backend such as DataKit
+- exports `pprof` payloads to a compatible HTTP profiling receiver
 
 ## Status
 
@@ -33,7 +33,7 @@ import {
   SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
 } from '@opentelemetry/semantic-conventions';
 import {
-  DatakitProfilingExporter,
+  HttpProfilingExporter,
   NodeProfiling,
 } from '@beacon-observability/profiler-nodejs';
 
@@ -43,8 +43,8 @@ const profiler = new NodeProfiling({
     [ATTR_SERVICE_VERSION]: '1.2.3',
     [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: 'dev',
   }),
-  exporter: new DatakitProfilingExporter({
-    endpoint: 'http://127.0.0.1:9529/profiling/v1/input',
+  exporter: new HttpProfilingExporter({
+    endpoint: 'http://127.0.0.1:8081/profiles',
   }),
   profileTypes: ['wall', 'heap'],
   cpuProfilingEnabled: true,
@@ -53,14 +53,14 @@ const profiler = new NodeProfiling({
 await profiler.start();
 ```
 
-## DataKit
+## Receiver Endpoint
 
-DataKit profiling input accepts multipart profile uploads on
-`/profiling/v1/input`.
+The exporter sends multipart profile uploads to the explicitly configured HTTP
+endpoint. Beacon does not select or require a specific backend.
 
 ```ts
-new DatakitProfilingExporter({
-  endpoint: 'http://127.0.0.1:9529/profiling/v1/input',
+new HttpProfilingExporter({
+  endpoint: 'http://127.0.0.1:8081/profiles',
 });
 ```
 

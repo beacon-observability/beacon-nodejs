@@ -5,10 +5,10 @@ the complete OpenTelemetry JavaScript Contrib source tree. This standalone
 downstream repository preserves the official upstream history while maintaining
 Beacon-specific features, tests, versions, and release processes independently.
 
-The project is currently in a pre-release engineering stage. The Beacon product
-version is `0.1.0-dev`, and there is no official Beacon Node.js installation
-package or production support commitment. Inherited OpenTelemetry packages keep
-their original names and versions and are not presented as Beacon releases.
+The current Beacon product version is `0.1.0`. This release fixes a reproducible
+source baseline for Beacon Node.js; it does not republish the inherited
+OpenTelemetry packages or provide a public npm package. Inherited OpenTelemetry
+packages keep their original names, versions, and release lifecycles.
 
 The repository currently includes an experimental private
 `@beacon-observability/profiler-nodejs` workspace. It collects Node.js wall and
@@ -23,11 +23,10 @@ signal.
 - [Source provenance and adopted upstream baseline](beacon/upstream.lock.json)
 - [OpenTelemetry synchronization process](beacon/UPSTREAM.md)
 - [CI scope and workflow isolation](beacon/CI.md)
-- [Release prerequisites](beacon/RELEASING.md)
+- [Release process](beacon/RELEASING.md)
 - [Beacon product changelog](beacon/CHANGELOG.md)
 - [Verified Beacon-specific contributors](beacon/CONTRIBUTORS.md)
 - [Profiler workspace](packages/profiler-nodejs/)
-- [Trace and profile example](examples/trace-profile-demo/)
 - [OTLP trace validation example](examples/validation-demo/)
 - [Contribution guide](CONTRIBUTING.md)
 
@@ -50,7 +49,7 @@ for the recorded result.
 This CI scope covers Beacon-owned entry points and the profiler workspace. It
 does not replace the complete upstream instrumentation, browser,
 service-integration, or all-versions matrices. A successful build or test run
-does not constitute DataKit ingestion acceptance or an official release.
+does not constitute profiling receiver compatibility or npm package acceptance.
 
 ## Beacon Contributors
 

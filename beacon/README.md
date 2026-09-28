@@ -7,15 +7,15 @@ cross-language documentation entry point is
 
 ## Status
 
-Beacon Node.js is under development and has no official release or installation
-entry. The repository is based on the latest official upstream `main` commit
-recorded when the project was established. That exact commit, rather than the
-moving branch name, is the reproducible baseline.
+Beacon Node.js `0.1.0` is a GitHub source release. The repository is based on
+the official upstream `main` commit recorded when the project was established.
+That exact commit, rather than the moving branch name, is the reproducible
+baseline.
 
-The inherited upstream packages and the Beacon-specific profiler have not yet
-completed the full upstream matrix, target Node.js runtime matrix, DataKit
-ingestion acceptance, or release-candidate artifact validation. No package in
-this repository should be presented as a supported Beacon distribution yet.
+The dedicated Beacon checks pass on Node.js 18.19, 20, 22, and 24. The complete
+upstream matrix and receiver compatibility matrix have not been run. The
+Beacon-specific profiler remains private and experimental, and no package in
+this repository is published as a supported Beacon npm distribution.
 
 ## Repository Layout
 
@@ -23,7 +23,6 @@ this repository should be presented as a supported Beacon distribution yet.
 | --- | --- |
 | [`packages/`](../packages/) | Inherited OpenTelemetry JavaScript Contrib packages and Beacon-specific packages |
 | [`packages/profiler-nodejs/`](../packages/profiler-nodejs/) | Experimental Beacon Node.js profiling bridge |
-| [`examples/trace-profile-demo/`](../examples/trace-profile-demo/) | Local trace and profiling integration example |
 | [`examples/validation-demo/`](../examples/validation-demo/) | Local OTLP trace validation example |
 | [`beacon/`](./) | Beacon baseline, synchronization, status, and release documentation |
 | [`.github/workflows/beacon-ci.yml`](../.github/workflows/beacon-ci.yml) | Isolated Beacon validation workflow |
@@ -53,9 +52,9 @@ The experimental `@beacon-observability/profiler-nodejs` workspace package:
 - produces receiver-compatible `pprof` attachments; and
 - can send multipart profile batches to a configured profiling endpoint.
 
-This list identifies source entry points, not validated or released product
-capabilities. The package is marked private until product identity, runtime
-coverage, ingestion compatibility, and release permissions are confirmed.
+This list identifies source entry points, not stable package capabilities. The
+package remains private until its public package identity and receiver
+compatibility have been validated.
 
 ## Local Validation
 

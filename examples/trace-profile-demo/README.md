@@ -3,7 +3,7 @@
 This example provides a quick local check that:
 
 - trace data can be generated and exported; and
-- profiles can be collected and sent through `DatakitProfilingExporter`.
+- profiles can be collected and sent through `HttpProfilingExporter`.
 
 ## Contents
 
@@ -12,7 +12,7 @@ This example provides a quick local check that:
   produce a complete trace.
 - `run-demo.js`: starts the sender, generates load, triggers profile collection,
   and sends telemetry to the configured endpoints.
-- `mock-backend.js`: an optional local receiver for testing without DataKit.
+- `mock-backend.js`: an optional local receiver for testing.
 
 ## Install
 
@@ -33,11 +33,11 @@ The default endpoints are:
 
 - traces: `http://127.0.0.1:4318/v1/traces`
 - metrics: `http://127.0.0.1:4318/v1/metrics`
-- profiles: `http://127.0.0.1:9529/profiling/v1/input`
+- profiles: `http://127.0.0.1:8081/profiles`
 
 The command prints the actual exporter endpoints, sends four `/work` requests,
-and triggers one `/__collect-profile` request. If DataKit is reachable, the
-trace, metric, and profile payloads are sent to it.
+and triggers one `/__collect-profile` request. If the configured receivers are
+reachable, the trace, metric, and profile payloads are sent to them.
 
 ## Run Only the Application
 
@@ -50,7 +50,7 @@ Override the endpoints when needed:
 ```bash
 TRACE_ENDPOINT=http://127.0.0.1:4318/v1/traces \
 METRIC_ENDPOINT=http://127.0.0.1:4318/v1/metrics \
-PROFILE_ENDPOINT=http://127.0.0.1:9529/profiling/v1/input \
+PROFILE_ENDPOINT=http://127.0.0.1:8081/profiles \
 npm run app
 ```
 
@@ -67,6 +67,6 @@ curl 'http://127.0.0.1:8080/__collect-profile'
   instrumentation.
 - Profiling uses the local
   `@beacon-observability/profiler-nodejs` development package.
-- By default, this demo is a sender only and does not listen on port `9529`.
+- By default, this demo is a sender only and does not start a receiver.
 - This demo checks whether signals can be emitted. It is not a production
   configuration or support claim.

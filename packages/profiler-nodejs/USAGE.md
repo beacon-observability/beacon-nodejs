@@ -1,8 +1,9 @@
 # Node.js Profiler Module
 
-`@beacon-observability/profiler-nodejs` is a practical profiling bridge for Node.js.
-It collects profiles with `@datadog/pprof`, maps OpenTelemetry resource data to
-profiling tags, and uploads profiles to a backend such as DataKit.
+`@beacon-observability/profiler-nodejs` is a practical profiling bridge for
+Node.js. It collects profiles with `@datadog/pprof`, maps OpenTelemetry
+resource data to profiling tags, and uploads profiles to a compatible HTTP
+receiver.
 
 This package is not an implementation of the OpenTelemetry Profiles signal. It
 is a compatibility-focused module for real profile delivery.
@@ -32,7 +33,7 @@ import {
   SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
 } from '@opentelemetry/semantic-conventions';
 import {
-  DatakitProfilingExporter,
+  HttpProfilingExporter,
   NodeProfiling,
 } from '@beacon-observability/profiler-nodejs';
 
@@ -42,7 +43,9 @@ const profiler = new NodeProfiling({
     [ATTR_SERVICE_VERSION]: '1.2.3',
     [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: 'prod',
   }),
-  exporter: new DatakitProfilingExporter(),
+  exporter: new HttpProfilingExporter({
+    endpoint: 'http://127.0.0.1:8081/profiles',
+  }),
 });
 
 await profiler.start();
@@ -50,11 +53,11 @@ await profiler.start();
 
 ## Exporter Options
 
-### `DatakitProfilingExporter`
+### `HttpProfilingExporter`
 
 ```ts
-new DatakitProfilingExporter({
-  endpoint: 'http://127.0.0.1:9529/profiling/v1/input',
+new HttpProfilingExporter({
+  endpoint: 'http://127.0.0.1:8081/profiles',
   timeoutMillis: 30000,
   headers: {},
   fetch: globalThis.fetch,
@@ -65,7 +68,7 @@ Parameters:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `endpoint` | `string` | `http://127.0.0.1:9529/profiling/v1/input` | Profile upload endpoint. |
+| `endpoint` | `string` | required | Profile upload endpoint. |
 | `timeoutMillis` | `number` | `30000` | HTTP timeout for one upload request. |
 | `headers` | `Record<string, string>` | `{}` | Extra request headers. |
 | `fetch` | `typeof fetch` | `globalThis.fetch` | Custom fetch implementation. |
@@ -117,7 +120,7 @@ By default, the profiler:
 - runs one collection cycle every 60 seconds
 - records a 10 second wall profile
 - enables CPU time inside the wall profile
-- uploads to `http://127.0.0.1:9529/profiling/v1/input`
+- requires an explicit HTTP profile endpoint
 
 ## Lifecycle
 

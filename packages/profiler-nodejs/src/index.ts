@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-export { DatakitProfilingExporter } from './exporter';
+export { HttpProfilingExporter } from './exporter';
 export { NodeProfiling } from './profiler';
 export type {
   CollectedProfile,
-  DatakitProfilingExporterOptions,
+  HttpProfilingExporterOptions,
   NodeProfileType,
   NodeProfilingOptions,
   ProfileBatch,

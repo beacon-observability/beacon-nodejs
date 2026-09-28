@@ -35,7 +35,7 @@ const { HttpInstrumentation } = require('@opentelemetry/instrumentation-http');
 
 const serviceName = process.env.OTEL_SERVICE_NAME || 'validation-demo';
 const otlpBaseEndpoint =
-  process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:9529/otel';
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318';
 const otlpTracesEndpoint =
   process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ||
   appendPath(otlpBaseEndpoint, 'v1/traces');

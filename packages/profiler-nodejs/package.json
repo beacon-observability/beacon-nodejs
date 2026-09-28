@@ -1,6 +1,6 @@
 {
   "name": "@beacon-observability/profiler-nodejs",
-  "version": "0.1.0-dev",
+  "version": "0.1.0",
   "private": true,
   "description": "Node.js profiling bridge for OpenTelemetry resource metadata and pprof export",
   "main": "build/src/index.js",
@@ -23,8 +23,7 @@
     "opentelemetry",
     "profiling",
     "nodejs",
-    "pprof",
-    "datakit"
+    "pprof"
   ],
   "author": "OpenTelemetry Authors",
   "license": "Apache-2.0",

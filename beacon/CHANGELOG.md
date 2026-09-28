@@ -7,6 +7,8 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+## 0.1.0 - 2026-09-28
+
 ### Initial downstream project
 
 - Established the Beacon Node.js repository from official OpenTelemetry
@@ -15,15 +17,18 @@ the exact adopted OpenTelemetry commit is recorded in
 - Added the private experimental
   `@beacon-observability/profiler-nodejs` workspace and local validation
   examples.
-- Verified profiler compilation and six unit tests on Node.js 24 during the
-  initial import.
-- Added pinned source metadata, an independent Beacon development version,
-  project checks, and isolated Beacon CI.
+- Added a receiver-neutral HTTP profiling exporter and local validation
+  examples.
+- Verified the Beacon checks on Node.js 18.19, 20, 22, and 24, including
+  profiler compilation and six unit tests.
+- Added pinned source metadata, an independent Beacon product version, project
+  checks, and isolated Beacon CI.
 
 ### Known limitations
 
-- The complete upstream and Node.js runtime matrices have not yet passed in the
-  Beacon repository.
-- DataKit ingestion and release-candidate artifacts have not been accepted.
-- The profiler package is private and there is no official Beacon Node.js
-  release or installation entry.
+- The complete inherited upstream matrix has not been run in the Beacon
+  repository.
+- Receiver compatibility and install-from-artifact acceptance have not been
+  completed.
+- The profiler package remains private and experimental; this release does not
+  publish an npm package.
