@@ -7,6 +7,20 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+## 1.2.0 - 2026-10-03
+
+### Opt-in Security
+
+- Added `@beacon-observability/security-nodejs` and integrated it with the
+  `@beacon-observability/nodejs/register` ESM preload entry point.
+- Added bounded runtime data-flow findings and runtime SBOM events following
+  the pinned Beacon Security schema and fingerprint version 1 contract.
+- Kept Security and diagnostic file output disabled by default, with explicit
+  `BEACON_SECURITY_*` configuration for application source scope and local
+  snapshots.
+- Added contract, loader, framework boundary, exporter, control, and SBOM
+  regression tests for the supported Node.js 22 and 24 runtimes.
+
 ## 1.1.0 - 2026-09-28
 
 ### Zero-code Node.js package

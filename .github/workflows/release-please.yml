@@ -13,6 +13,7 @@ name: Run Release Please
 jobs:
   # creates the release PR, and publishes releases
   release-please:
+    if: github.repository == 'open-telemetry/opentelemetry-js-contrib'
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
     runs-on: ubuntu-latest
@@ -66,7 +67,7 @@ jobs:
   # If releases have been created, then publish to npm.
   npm-publish:
     needs: release-please
-    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    if: ${{ github.repository == 'open-telemetry/opentelemetry-js-contrib' && needs.release-please.outputs.releases_created == 'true' }}
     permissions:
       contents: read
       id-token: write # needed for OIDC and provenance

@@ -200,6 +200,16 @@ async function stagePackage(explicitRegisterPath) {
     'npm',
     [
       'pack',
+      '--workspace=@beacon-observability/security-nodejs',
+      '--pack-destination',
+      directory,
+    ],
+    { cwd: root, stdio: 'pipe' }
+  );
+  execFileSync(
+    'npm',
+    [
+      'pack',
       '--workspace=@beacon-observability/nodejs',
       '--pack-destination',
       directory,
@@ -211,17 +221,30 @@ async function stagePackage(explicitRegisterPath) {
     path.join(directory, 'package.json'),
     JSON.stringify({ private: true }, null, 2)
   );
+  const beaconVersion = JSON.parse(
+    await readFile(path.join(root, 'packages/nodejs/package.json'), 'utf8')
+  ).version;
   const profilerTarball = path.join(
     directory,
-    'beacon-observability-profiler-nodejs-1.1.0.tgz'
+    `beacon-observability-profiler-nodejs-${beaconVersion}.tgz`
+  );
+  const securityTarball = path.join(
+    directory,
+    `beacon-observability-security-nodejs-${beaconVersion}.tgz`
   );
   const nodejsTarball = path.join(
     directory,
-    'beacon-observability-nodejs-1.1.0.tgz'
+    `beacon-observability-nodejs-${beaconVersion}.tgz`
   );
   execFileSync(
     'npm',
-    ['install', '--no-package-lock', profilerTarball, nodejsTarball],
+    [
+      'install',
+      '--no-package-lock',
+      profilerTarball,
+      securityTarball,
+      nodejsTarball,
+    ],
     {
       cwd: directory,
       env: {
@@ -247,6 +270,47 @@ async function stagePackage(explicitRegisterPath) {
     { cwd: directory, stdio: 'pipe' }
   );
 
+  const esmRegisterPath = path.join(
+    directory,
+    'node_modules/@beacon-observability/nodejs/register.mjs'
+  );
+  execFileSync(process.execPath, ['--import', esmRegisterPath, '--eval', ''], {
+    cwd: directory,
+    env: {
+      ...process.env,
+      OTEL_TRACES_EXPORTER: 'none',
+      OTEL_METRICS_EXPORTER: 'none',
+      OTEL_LOGS_EXPORTER: 'none',
+    },
+    stdio: 'pipe',
+  });
+  if (securityRuntimeSupported()) {
+    execFileSync(
+      process.execPath,
+      [
+        '--import',
+        esmRegisterPath,
+        '--eval',
+        `if (!globalThis[Symbol.for('beacon.security.helpers.v1')]) {
+          throw new Error('Beacon Security preload was not installed');
+        }`,
+      ],
+      {
+        cwd: directory,
+        env: {
+          ...process.env,
+          BEACON_SECURITY_ENABLED: 'true',
+          BEACON_SECURITY_NODE_INCLUDE: directory,
+          BEACON_SECURITY_SBOM_ENABLED: 'false',
+          OTEL_TRACES_EXPORTER: 'none',
+          OTEL_METRICS_EXPORTER: 'none',
+          OTEL_LOGS_EXPORTER: 'none',
+        },
+        stdio: 'pipe',
+      }
+    );
+  }
+
   return {
     registerPath: path.join(
       directory,
@@ -256,6 +320,14 @@ async function stagePackage(explicitRegisterPath) {
       await rm(directory, { recursive: true, force: true });
     },
   };
+}
+
+function securityRuntimeSupported() {
+  const [major, minor, patch] = process.versions.node.split('.').map(Number);
+  return (
+    (major === 22 && (minor > 22 || (minor === 22 && patch >= 3))) ||
+    (major === 24 && (minor > 11 || (minor === 11 && patch >= 1)))
+  );
 }
 
 function listen(server, port) {

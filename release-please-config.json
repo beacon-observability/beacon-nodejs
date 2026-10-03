@@ -85,6 +85,9 @@
     },
     "packages/profiler-nodejs": {
       "skip-github-release": true
+    },
+    "packages/security-nodejs": {
+      "skip-github-release": true
     }
   }
 }

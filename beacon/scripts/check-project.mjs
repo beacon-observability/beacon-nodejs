@@ -26,6 +26,7 @@ const requiredFiles = [
   'beacon/RELEASING.md',
   'beacon/UPSTREAM.md',
   'beacon/upstream.lock.json',
+  'beacon/security-migration.lock.json',
   'beacon/version.properties',
   '.github/workflows/beacon-ci.yml',
 ];
@@ -75,6 +76,30 @@ check(
 );
 
 const nodejs = readJson('packages/nodejs/package.json');
+const security = readJson('packages/security-nodejs/package.json');
+check(
+  security.name === '@beacon-observability/security-nodejs',
+  'Unexpected Beacon Security package name'
+);
+check(security.private !== true, 'Beacon Security must be publishable');
+check(
+  security.version === beaconVersion,
+  'Beacon Security version must match beacon/version.properties'
+);
+check(
+  security.publishConfig?.access === 'public',
+  'Beacon Security package access must be public'
+);
+check(
+  security.repository?.url ===
+    'git+https://github.com/beacon-observability/beacon-nodejs.git',
+  'Beacon Security repository URL must point to Beacon Node.js'
+);
+check(
+  security.exports?.['./register'] === './src/register.mjs',
+  'Beacon Security package must expose its preload entry point'
+);
+
 check(
   nodejs.name === '@beacon-observability/nodejs',
   'Unexpected Beacon Node.js package name'
@@ -98,13 +123,40 @@ check(
   'Beacon Node.js repository URL must point to Beacon Node.js'
 );
 check(
-  nodejs.exports?.['./register'] === './build/src/register.js',
+  nodejs.exports?.['./register']?.require === './build/src/register.js' &&
+    nodejs.exports?.['./register']?.import === './register.mjs',
   'Beacon Node.js package must expose the zero-code register entry point'
 );
 check(
   nodejs.dependencies?.['@beacon-observability/profiler-nodejs'] ===
     `^${beaconVersion}`,
   'Beacon Node.js package must use the matching profiler version'
+);
+check(
+  nodejs.dependencies?.['@beacon-observability/security-nodejs'] ===
+    `^${beaconVersion}`,
+  'Beacon Node.js package must use the matching Security version'
+);
+
+const securityMigration = readJson('beacon/security-migration.lock.json');
+check(
+  securityMigration.schemaVersion === 1,
+  'Unsupported Security migration lock schema'
+);
+check(
+  securityMigration.source?.repository ===
+    'https://github.com/Guan' + 'ceCloud/SecurityContext.git' &&
+    /^[0-9a-f]{40}$/.test(securityMigration.source?.commit ?? '') &&
+    securityMigration.source?.subdirectory === 'nodejs',
+  'Security migration source must be pinned to the original Node.js implementation'
+);
+check(
+  securityMigration.contract?.repository ===
+    'https://github.com/beacon-observability/beacon-security-spec' &&
+    /^[0-9a-f]{40}$/.test(securityMigration.contract?.commit ?? '') &&
+    securityMigration.contract?.schemaVersion === 1 &&
+    securityMigration.contract?.fingerprintVersion === 1,
+  'Beacon Security contract must be pinned to schema and fingerprint version 1'
 );
 
 const traceDemo = readJson('examples/trace-profile-demo/package.json');
@@ -155,6 +207,12 @@ check(
   releaseConfig.packages?.['packages/nodejs']?.['skip-github-release'] === true,
   'Beacon Node.js package must skip inherited GitHub releases'
 );
+check(
+  releaseConfig.packages?.['packages/security-nodejs']?.[
+    'skip-github-release'
+  ] === true,
+  'Beacon Security must skip inherited GitHub releases'
+);
 const releaseManifest = readJson('.release-please-manifest.json');
 check(
   releaseManifest['packages/profiler-nodejs'] === profiler.version,
@@ -164,11 +222,15 @@ check(
   releaseManifest['packages/nodejs'] === nodejs.version,
   'Beacon Node.js release manifest version must match package version'
 );
+check(
+  releaseManifest['packages/security-nodejs'] === security.version,
+  'Beacon Security release manifest version must match package version'
+);
 
 const disallowedTerms = ['guan' + 'ce', 'cloud' + 'care', 'data' + 'kit'];
 const grepArgs = ['grep', '-I', '-n', '-i'];
 for (const term of disallowedTerms) grepArgs.push('-e', term);
-grepArgs.push('--', '.');
+grepArgs.push('--', '.', ':(exclude)beacon/security-migration.lock.json');
 const disallowedResult = spawnSync('git', grepArgs, {
   cwd: root,
   encoding: 'utf8',

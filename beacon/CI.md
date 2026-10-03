@@ -8,7 +8,7 @@ read-only repository permissions.
 ## Beacon Matrix
 
 The workflow runs the Beacon project check, installs the committed lockfile,
-compiles and tests both Beacon-owned packages, and runs the zero-code injection
+compiles and tests all Beacon-owned packages, and runs the zero-code injection
 smoke test on Node.js 18.19, 20, 22, and 24. The Node.js 24 job also checks
 repository formatting, Markdown, release-please package metadata, and example
 lockfiles.
@@ -40,6 +40,9 @@ npm run compile --workspace=@beacon-observability/nodejs
 npm test --workspace=@beacon-observability/nodejs
 npm run compile --workspace=@beacon-observability/profiler-nodejs
 npm test --workspace=@beacon-observability/profiler-nodejs
+npm run test:conformance --workspace=@beacon-observability/security-nodejs
+# Full Security tests require Node.js 22.22.3+ or 24.11.1+.
+npm test --workspace=@beacon-observability/security-nodejs
 node beacon/scripts/zero-code-smoke.mjs
 npm run lint:prettier
 npm run lint:markdown

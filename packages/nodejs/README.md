@@ -1,14 +1,14 @@
 # `@beacon-observability/nodejs`
 
 Beacon Node.js provides zero-code OpenTelemetry auto-instrumentation and the
-optional Beacon profiler in one package.
+optional Beacon profiler and Security runtime in one package.
 
 ## Install
 
-Install version `1.1.0` with:
+Install the current release with:
 
 ```bash
-npm install @beacon-observability/nodejs@1.1.0
+npm install @beacon-observability/nodejs
 ```
 
 ## Zero-code injection
@@ -35,6 +35,33 @@ to limit the enabled instrumentation set.
 
 The application must not initialize another OpenTelemetry SDK when the register
 entry point is preloaded.
+
+## Optional Security
+
+Beacon Security is included in `1.2.0` and remains disabled by default. On
+Node.js 22.22.3+ or 24.11.1+, use
+the ESM preload entry point and explicitly select the application source root:
+
+```bash
+export NODE_OPTIONS="--import @beacon-observability/nodejs/register"
+export BEACON_SECURITY_ENABLED=true
+export BEACON_SECURITY_NODE_INCLUDE=/srv/app
+```
+
+It reuses the normal `OTEL_*` resource and Logs exporter configuration.
+Runtime SBOM is enabled with the Security lifecycle unless
+`BEACON_SECURITY_SBOM_ENABLED=false`. Diagnostic files remain disabled unless
+`BEACON_SECURITY_LOCAL_OUTPUT_ENABLED=true`; their default directory is
+`./beacon-security-output/<instance-id>`.
+
+The CommonJS `--require @beacon-observability/nodejs/register` entry point
+continues to initialize tracing and profiling but cannot install the synchronous
+ESM source transformer. Use `--import` whenever Security is enabled.
+
+The Security workspace provides a
+[Kubernetes Deployment example](../security-nodejs/examples/kubernetes/deployment.yaml)
+that bakes this complete package into the application image. It does not need a
+separate Security image, sidecar, or init container.
 
 ## Optional profiling
 
