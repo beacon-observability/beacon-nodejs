@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "source": {
     "repository": "https://github.com/GuanceCloud/SecurityContext.git",
-    "commit": "2c45b64878349360792354d750c253728008cfb0",
+    "commit": "2c45b64267987f6deefa43159f06f928c6974177",
     "subdirectory": "nodejs"
   },
   "contract": {
