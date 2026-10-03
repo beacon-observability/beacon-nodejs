@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "repository": "https://github.com/GuanceCloud/SecurityContext.git",
+    "commit": "2c45b64878349360792354d750c253728008cfb0",
+    "subdirectory": "nodejs"
+  },
+  "contract": {
+    "repository": "https://github.com/beacon-observability/beacon-security-spec",
+    "commit": "236eda11eca4e4421af4c391a995c2b6af20c766",
+    "schemaVersion": 1,
+    "fingerprintVersion": 1
+  }
+}

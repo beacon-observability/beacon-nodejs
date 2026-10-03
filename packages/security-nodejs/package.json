@@ -1,0 +1,81 @@
+{
+  "name": "@beacon-observability/security-nodejs",
+  "version": "1.1.0",
+  "description": "Opt-in Beacon Security runtime observation and runtime SBOM for Node.js",
+  "type": "module",
+  "main": "src/index.mjs",
+  "types": "src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.mjs",
+      "require": "./src/index.mjs"
+    },
+    "./register": "./src/register.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/beacon-observability/beacon-nodejs.git",
+    "directory": "packages/security-nodejs"
+  },
+  "homepage": "https://github.com/beacon-observability/beacon-nodejs/tree/main/packages/security-nodejs#readme",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "test": "node --test 'tests/*.test.mjs'",
+    "test:conformance": "node --test tests/schema-contract.test.mjs"
+  },
+  "keywords": [
+    "opentelemetry",
+    "observability",
+    "security",
+    "runtime-sbom",
+    "nodejs"
+  ],
+  "author": "Beacon Observability Authors",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": "^18.19.0 || >=20.6.0"
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md",
+    "security-spec.properties"
+  ],
+  "peerDependencies": {
+    "@opentelemetry/api": ">=1.9.0 <1.10.0"
+  },
+  "dependencies": {
+    "@babel/generator": "7.29.7",
+    "@babel/parser": "7.29.7",
+    "@babel/traverse": "7.29.0",
+    "@babel/types": "7.29.7",
+    "@jridgewell/trace-mapping": "0.3.31",
+    "@opentelemetry/api-logs": "0.222.0",
+    "@opentelemetry/core": "2.11.0",
+    "@opentelemetry/instrumentation": "0.222.0",
+    "import-in-the-middle": "3.5.1",
+    "require-in-the-middle": "8.0.1"
+  },
+  "devDependencies": {
+    "@jridgewell/gen-mapping": "0.3.13",
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/exporter-logs-otlp-http": "0.222.0",
+    "@opentelemetry/instrumentation-express": "0.70.0",
+    "@opentelemetry/instrumentation-http": "0.222.0",
+    "@opentelemetry/sdk-logs": "0.222.0",
+    "@opentelemetry/sdk-node": "0.222.0",
+    "@opentelemetry/sdk-trace-base": "2.11.0",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
+    "express": "5.2.1",
+    "express4": "npm:express@4.22.3",
+    "fastify": "5.7.4",
+    "mysql2": "3.22.0",
+    "pg": "8.7.1",
+    "undici": "6.28.0"
+  }
+}
