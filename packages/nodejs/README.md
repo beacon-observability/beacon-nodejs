@@ -59,6 +59,11 @@ The CommonJS `--require @beacon-observability/nodejs/register` entry point
 continues to initialize tracing and profiling but cannot install the synchronous
 ESM source transformer. Use `--import` whenever Security is enabled.
 
+The Security workspace provides a
+[Kubernetes Deployment example](../security-nodejs/examples/kubernetes/deployment.yaml)
+that bakes this complete package into the application image. It does not need a
+separate Security image, sidecar, or init container.
+
 ## Optional profiling
 
 Profiling is disabled unless explicitly enabled. To export compatible

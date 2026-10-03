@@ -27,6 +27,12 @@ enabled Security lifecycle and can be disabled with
 `BEACON_SECURITY_SBOM_ENABLED=false`. Local files are also disabled by default;
 set `BEACON_SECURITY_LOCAL_OUTPUT_ENABLED=true` for diagnostic snapshots.
 
+For Kubernetes, install the complete `@beacon-observability/nodejs` package in
+the application image and use the checked-in
+[Deployment example](examples/kubernetes/deployment.yaml). No Security sidecar
+or init container is required; the normal application container only needs the
+ESM preload and OTLP environment variables.
+
 The language-neutral contract is pinned in
 [`security-spec.properties`](security-spec.properties). This implementation
 currently models selected HTTP inputs and SQL, command, outbound HTTP, and file

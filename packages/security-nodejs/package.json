@@ -41,6 +41,7 @@
   },
   "files": [
     "src",
+    "examples",
     "LICENSE",
     "README.md",
     "security-spec.properties"
