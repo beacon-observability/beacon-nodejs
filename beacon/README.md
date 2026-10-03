@@ -7,13 +7,14 @@ cross-language documentation entry point is
 
 ## Status
 
-Beacon Node.js `1.1.0` provides the public
+The source tree is preparing Beacon Node.js `1.2.0`, which provides the
 `@beacon-observability/nodejs` zero-code package and the matching
-`@beacon-observability/profiler-nodejs` component on npm. Beacon Security is
-implemented for the next release but has not yet been published. The repository is
-based on the official upstream `main` commit recorded when the project was
-established. That exact commit, rather than the moving branch name, is the
-reproducible baseline.
+`@beacon-observability/profiler-nodejs` and
+`@beacon-observability/security-nodejs` components. The current public stable
+version remains `1.1.0` until npm and GitHub release acceptance completes. The
+repository is based on the official upstream `main` commit recorded when the
+project was established. That exact commit, rather than the moving branch
+name, is the reproducible baseline.
 
 The dedicated Beacon checks target Node.js 18.19, 20, 22, and 24. The complete
 upstream matrix and receiver compatibility matrix have not been run. Only the

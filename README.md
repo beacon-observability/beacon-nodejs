@@ -5,10 +5,12 @@ the complete OpenTelemetry JavaScript Contrib source tree. This standalone
 downstream repository preserves the official upstream history while maintaining
 Beacon-specific features, tests, versions, and release processes independently.
 
-The current Beacon product version is `1.1.0`. Users install the public
-`@beacon-observability/nodejs` package for zero-code auto-instrumentation and
-optional profiling. Inherited OpenTelemetry packages keep their original
-names, versions, and release lifecycles and are not republished by Beacon.
+The source tree is preparing Beacon Node.js `1.2.0`; the current public stable
+version remains `1.1.0` until npm and GitHub release acceptance completes.
+Users install the public `@beacon-observability/nodejs` package for zero-code
+auto-instrumentation and optional profiling and Security. Inherited
+OpenTelemetry packages keep their original names, versions, and release
+lifecycles and are not republished by Beacon.
 
 The repository includes the public `@beacon-observability/nodejs` product
 package and `@beacon-observability/profiler-nodejs` profiling component. The
@@ -17,10 +19,10 @@ and can optionally collect wall and heap profiles through the profiler. The
 profiling component exports a compatible `pprof` layout and is not an
 implementation of the OpenTelemetry Profiles signal.
 
-Install the product package with:
+After the `1.2.0` release completes, install the exact product version with:
 
 ```sh
-npm install @beacon-observability/nodejs@1.1.0
+npm install @beacon-observability/nodejs@1.2.0
 ```
 
 Run an unchanged application through the zero-code preload entry point:

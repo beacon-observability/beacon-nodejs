@@ -7,6 +7,8 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+## 1.2.0 - 2026-10-03
+
 ### Opt-in Security
 
 - Added `@beacon-observability/security-nodejs` and integrated it with the

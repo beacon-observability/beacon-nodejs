@@ -19,7 +19,7 @@ below.
 ## Installation
 
 ```sh
-npm install @beacon-observability/profiler-nodejs@1.1.0
+npm install @beacon-observability/profiler-nodejs@1.2.0
 ```
 
 See [USAGE.md](./USAGE.md) for a short module overview, configuration options,

@@ -1121,7 +1121,7 @@ function toDocument(
           {
             type: 'application',
             name: 'Beacon Security',
-            version: toolVersion || '1.1.0',
+            version: toolVersion || '1.2.0',
           },
         ],
       },

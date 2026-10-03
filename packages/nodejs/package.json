@@ -1,6 +1,6 @@
 {
   "name": "@beacon-observability/nodejs",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Beacon zero-code OpenTelemetry auto-instrumentation, profiling, and opt-in Security for Node.js",
   "main": "build/src/index.js",
   "types": "build/src/index.d.ts",
@@ -51,8 +51,8 @@
     "register.mjs"
   ],
   "dependencies": {
-    "@beacon-observability/profiler-nodejs": "^1.1.0",
-    "@beacon-observability/security-nodejs": "^1.1.0",
+    "@beacon-observability/profiler-nodejs": "^1.2.0",
+    "@beacon-observability/security-nodejs": "^1.2.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.80.0"
   },

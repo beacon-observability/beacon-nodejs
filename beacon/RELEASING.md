@@ -13,7 +13,7 @@ packages retain their upstream identities and must not be published by Beacon.
 - All Beacon-owned workspace versions must match the Beacon product version;
   `node beacon/scripts/check-project.mjs` enforces this relationship.
 - Development versions use `X.Y.Z-dev`, release candidates use `X.Y.Z-rc.N`,
-  and official releases use `X.Y.Z` with a `beacon-vX.Y.Z` tag.
+  and official releases use `X.Y.Z` with a `vX.Y.Z` tag.
 - Beacon product versions remain independent of inherited OpenTelemetry package
   versions and the pinned upstream commit.
 
@@ -32,7 +32,8 @@ Before a release:
    three Beacon-owned packages are in the npm publication scope.
 6. Publish the profiler and Security component first and the product package
    last, then publish the
-   immutable `beacon-vX.Y.Z` source tag and matching GitHub Release.
+   immutable `vX.Y.Z` source tag and matching GitHub Release. The release title
+   must exactly match the tag.
 
 ## Candidate Validation
 

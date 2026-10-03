@@ -1,6 +1,6 @@
 {
   "name": "@beacon-observability/security-nodejs",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Opt-in Beacon Security runtime observation and runtime SBOM for Node.js",
   "type": "module",
   "main": "src/index.mjs",

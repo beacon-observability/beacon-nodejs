@@ -38,9 +38,8 @@ entry point is preloaded.
 
 ## Optional Security
 
-Beacon Security is implemented in this source tree for the next release and is
-not part of the published `1.1.0` package. It is disabled by default. On Node.js
-22.22.3+ or 24.11.1+, use
+Beacon Security is included in `1.2.0` and remains disabled by default. On
+Node.js 22.22.3+ or 24.11.1+, use
 the ESM preload entry point and explicitly select the application source root:
 
 ```bash

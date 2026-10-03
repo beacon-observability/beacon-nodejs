@@ -3,6 +3,11 @@
 
 ## Unreleased
 
+## 1.2.0 - 2026-10-03
+
+- Released with the matching Beacon Node.js product and Security component;
+  profiling behavior remains unchanged from `1.1.0`.
+
 ## 1.1.0 - 2026-09-28
 
 - Added integration with the `@beacon-observability/nodejs` zero-code preload
