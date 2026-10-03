@@ -37,6 +37,7 @@ jobs:
         run: npm ci
       - name: Compile Beacon packages
         run: |
+          npm run compile --workspace=@opentelemetry/instrumentation-express
           npm run compile --workspace=@beacon-observability/profiler-nodejs
           npm run compile --workspace=@beacon-observability/nodejs
       - name: Test Beacon packages
