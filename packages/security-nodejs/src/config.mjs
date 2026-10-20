@@ -162,6 +162,9 @@ export function profile(adapters = []) {
         RULES.map(r => [r, flag('beacon.security.rules.' + r + '.enabled')])
       ),
       budgets,
+      analysis: {
+        sql_dialect: text('beacon.security.analysis.sql.dialect', 'unknown'),
+      },
     })
   );
 }
