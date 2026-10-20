@@ -185,6 +185,11 @@ export function eventRecord(input, identity = {}) {
     event.trace_availability = 'not_guaranteed_by_trace_id';
   }
   if (event.event_name === 'beacon.security.finding') {
+    event.attack_evidence ||= {
+      status: 'unknown',
+      reason: 'analysis_unavailable',
+      outcome: 'not_assessed',
+    };
     event.component = componentReference(event.component, event.application_id);
     event.stack ||= [];
   }

@@ -1,5 +1,10 @@
 import { eventRecord, requestFields } from '../schema.mjs';
 import {
+  evidence,
+  evidenceRank,
+  evidenceStatus,
+} from '../core/attack-evidence.mjs';
+import {
   VERSION,
   RULES,
   collectionConfigured,
@@ -285,7 +290,11 @@ export class RuntimeLedger {
       const sampleTime = Date.now();
       const previousSample = number(finding?.last_sample_millis);
       const runId = text(runState.run_id);
+      const rank = evidenceRank(original);
+      const strongest = finding?.strongest_evidence_rank ?? -1;
+      const upgrade = rank > strongest;
       const sample =
+        upgrade ||
         !finding ||
         sampleTime - previousSample >= this.sampleMillis ||
         runId !== text(finding?.sample_run_id);
@@ -320,12 +329,18 @@ export class RuntimeLedger {
           validation: 'unvalidated',
           sink: copy(event.sink),
           first_seen: event.observed_at,
+          attack_evidence_counts: { unknown: 0, no_evidence: 0, suspected: 0 },
           occurrences: 0,
           last_sample_millis: 0,
         };
         this.findings.set(findingKey, finding);
       }
       increment(finding, 'occurrences');
+      const status = evidenceStatus(event);
+      finding.attack_evidence_counts = {
+        ...finding.attack_evidence_counts,
+        [status]: finding.attack_evidence_counts[status] + 1,
+      };
       finding.last_seen = event.observed_at;
       finding.last_trace_id = event.trace_id;
       finding.last_evidence_id = event.evidence_id;
@@ -339,34 +354,44 @@ export class RuntimeLedger {
       event.occurrences_total = finding.occurrences;
       event.aggregation_status = 'tracked';
       event.evidence_sampled = sample;
-      event.evidence_sample_reason = sample ? 'interval_or_run' : 'interval';
+      event.evidence_sample_reason = upgrade
+        ? 'evidence_upgrade'
+        : sample
+          ? 'interval_or_run'
+          : 'interval';
+      if (upgrade) {
+        finding.strongest_evidence_rank = rank;
+        finding.strongest_attack_evidence = copy(
+          event.attack_evidence || evidence('unknown', 'analysis_unavailable')
+        );
+        finding.assessment = event.assessment;
+      }
       if (sample) {
         finding.last_sample_millis = sampleTime;
         finding.sample_run_id = runId;
-        const representative = copy(event);
-        const previousBytes = number(finding.representative_bytes);
-        let estimate = jsonBytes(representative);
-        if (
-          estimate > limit('beacon.security.evidence.max.bytes', 65536) ||
-          this.findingBytes - previousBytes + estimate > this.maxFindingBytes
-        ) {
-          this._omitEvidence(representative);
-          representative.truncation_reason = 'finding_snapshot_byte_budget';
-          estimate = jsonBytes(representative);
-          this.count('finding_sample_truncated');
-        }
-        if (
-          this.findingBytes - previousBytes + estimate <=
-          this.maxFindingBytes
-        ) {
-          this.findingBytes += estimate - previousBytes;
-          finding.representative_bytes = estimate;
-          finding.representative = representative;
-        } else {
-          this.count('finding_sample_dropped');
-          delete finding.representative;
-          this.findingBytes = Math.max(0, this.findingBytes - previousBytes);
-          finding.representative_bytes = 0;
+        if (rank >= strongest) {
+          const representative = copy(event);
+          const previousBytes = number(finding.representative_bytes);
+          let estimate = jsonBytes(representative);
+          if (
+            estimate > limit('beacon.security.evidence.max.bytes', 65536) ||
+            this.findingBytes - previousBytes + estimate > this.maxFindingBytes
+          ) {
+            this._omitEvidence(representative);
+            representative.truncation_reason = 'finding_snapshot_byte_budget';
+            estimate = jsonBytes(representative);
+            this.count('finding_sample_truncated');
+          }
+          if (
+            this.findingBytes - previousBytes + estimate <=
+            this.maxFindingBytes
+          ) {
+            this.findingBytes += estimate - previousBytes;
+            finding.representative_bytes = estimate;
+            finding.representative = representative;
+          } else {
+            this.count('finding_sample_dropped');
+          }
         }
       } else {
         this.count('representative_samples_suppressed');
@@ -646,6 +671,7 @@ export class RuntimeLedger {
           observed_at: now(),
           identity: copy(this.identity),
           finding_id: finding.finding_id,
+          attack_evidence_counts: copy(finding.attack_evidence_counts),
           occurrences_total: finding.occurrences,
           first_seen: finding.first_seen,
           last_seen: finding.last_seen,
@@ -668,6 +694,7 @@ export class RuntimeLedger {
           'last_sample_millis',
           'sample_run_id',
           'representative_bytes',
+          'strongest_evidence_rank',
         ])
           delete value[field];
         return value;

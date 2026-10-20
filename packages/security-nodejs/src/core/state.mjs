@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { analyze, evidence, evidenceRank } from './attack-evidence.mjs';
 import { fileURLToPath } from 'node:url';
 import { eventRecord, sinkFields, findingFingerprint } from '../schema.mjs';
 import { trace } from '@opentelemetry/api';
@@ -45,7 +46,7 @@ export class SecurityState {
     this.objects = new WeakMap();
     this.objectCount = 0;
     this.bytes = 0;
-    this.seen = new Set();
+    this.seen = new Map();
     this.sites = new Set();
     this.maxNodes = limit('beacon.security.max.nodes', 8192);
     this.maxObjects = limit('beacon.security.max.objects', 4096);
@@ -303,7 +304,7 @@ export class SecurityState {
           ];
     });
   }
-  sink(rule, role, fn, location, marks) {
+  sink(rule, role, fn, location, marks, input, shell = 'unknown') {
     if (this.closed || !this.collection_enabled) return null;
     const site = rule + '|' + fn + '|' + location;
     if (!this.sites.has(site)) {
@@ -327,12 +328,19 @@ export class SecurityState {
       sink,
       signatures
     );
-    if (this.seen.has(fingerprint)) return null;
-    if (this.pending.length >= this.maxFindings) {
+    const attack = this.truncated
+      ? evidence('unknown', 'analysis_budget')
+      : analyze(rule, sink.role, input, marks, shell);
+    const previous = this.seen.get(fingerprint);
+    if (
+      previous &&
+      evidenceRank({ attack_evidence: attack }) <= evidenceRank(previous)
+    )
+      return null;
+    if (!previous && this.pending.length >= this.maxFindings) {
       this.exhaust('request_finding_limit');
       return null;
     }
-    this.seen.add(fingerprint);
     for (const signature of signatures)
       this.risk_source_signatures[signature] = 1;
     const graph = new Map();
@@ -357,7 +365,8 @@ export class SecurityState {
         schema_version: 1,
         source: 'beacon_security',
         event_name: 'beacon.security.finding',
-        evidence_id: 'ev-' + randomUUID(),
+        evidence_id: previous?.evidence_id || 'ev-' + randomUUID(),
+        attack_evidence: attack,
         finding_id: fingerprint,
         fingerprint_version: 1,
         rule,
@@ -404,7 +413,9 @@ export class SecurityState {
       },
       this.identity
     );
-    this.pending.push(event);
+    this.seen.set(fingerprint, event);
+    if (previous) this.pending[this.pending.indexOf(previous)] = event;
+    else this.pending.push(event);
     this.onFinding?.(event);
     return event;
   }
