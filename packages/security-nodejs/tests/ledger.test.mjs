@@ -227,13 +227,22 @@ test('repeated findings retain samples and count every request across runs', t =
     current.pending.push(original);
     const events = value.end(current);
     assert.deepEqual(original, saved);
-    if (events.length)
+    if (events[0]?.evidence_sampled)
       assert.deepEqual(events[0].propagation, original.propagation);
     return events;
   };
   assert.equal(request('first').length, 1);
   clock += 1000;
-  assert.deepEqual(request('repeat'), []);
+  const repeated = request('repeat');
+  assert.equal(repeated.length, 1);
+  assert.equal(repeated[0].occurrences_total, 2);
+  assert.equal(repeated[0].occurrence_id, 'repeat');
+  assert.equal(repeated[0].trace_id, 'b'.repeat(32));
+  assert.equal(repeated[0].aggregation_status, 'tracked');
+  assert.equal(repeated[0].evidence_sampled, false);
+  assert.equal(repeated[0].truncation_reason, 'evidence_sampled_out');
+  for (const field of ['sources', 'propagation', 'ranges', 'stack'])
+    assert.deepEqual(repeated[0][field], []);
   const finding = value.tick({}, { force: true }).findings.findings[0];
   assert.equal(finding.occurrences, 2);
   assert.equal(finding.last_trace_id, 'b'.repeat(32));
@@ -243,7 +252,7 @@ test('repeated findings retain samples and count every request across runs', t =
   ]);
   value.applyControl({ revision: 'new-run', run: runPolicy('new-run') });
   assert.equal(request('new-run').length, 1);
-  assert.deepEqual(request('in-run'), []);
+  assert.equal(request('in-run')[0].evidence_sampled, false);
   const run = value.tick({}, { force: true }).runs.runs[0];
   assert.equal(run.requests, 2);
   assert.equal(run.observations, 2);

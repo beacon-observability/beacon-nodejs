@@ -286,6 +286,7 @@ export class RuntimeLedger {
       const previousSample = number(finding?.last_sample_millis);
       const runId = text(runState.run_id);
       const sample =
+        !finding ||
         sampleTime - previousSample >= this.sampleMillis ||
         runId !== text(finding?.sample_run_id);
       const event = this._enrichEvent(
@@ -305,6 +306,11 @@ export class RuntimeLedger {
       if (!finding) {
         if (this.findings.size >= this.maxFindings) {
           this.count('finding_capacity_dropped');
+          event.aggregation_status = 'capacity_exceeded';
+          event.evidence_sample_reason = 'finding_capacity';
+          this._omitEvidence(event);
+          delete event.occurrences_total;
+          result.push(event);
           continue;
         }
         finding = {
@@ -330,6 +336,10 @@ export class RuntimeLedger {
       finding.triage = this._triage(findingKey);
       event.triage = copy(finding.triage);
 
+      event.occurrences_total = finding.occurrences;
+      event.aggregation_status = 'tracked';
+      event.evidence_sampled = sample;
+      event.evidence_sample_reason = sample ? 'interval_or_run' : 'interval';
       if (sample) {
         finding.last_sample_millis = sampleTime;
         finding.sample_run_id = runId;
@@ -340,9 +350,7 @@ export class RuntimeLedger {
           estimate > limit('beacon.security.evidence.max.bytes', 65536) ||
           this.findingBytes - previousBytes + estimate > this.maxFindingBytes
         ) {
-          for (const field of ['propagation', 'ranges', 'sources', 'stack'])
-            delete representative[field];
-          representative.truncated = true;
+          this._omitEvidence(representative);
           representative.truncation_reason = 'finding_snapshot_byte_budget';
           estimate = jsonBytes(representative);
           this.count('finding_sample_truncated');
@@ -360,11 +368,11 @@ export class RuntimeLedger {
           this.findingBytes = Math.max(0, this.findingBytes - previousBytes);
           finding.representative_bytes = 0;
         }
-        event.occurrences_total = finding.occurrences;
-        result.push(event);
       } else {
         this.count('representative_samples_suppressed');
+        this._omitEvidence(event);
       }
+      result.push(event);
       finding.dirty = true;
       this.findingsRevision++;
     }
@@ -414,6 +422,14 @@ export class RuntimeLedger {
       result.push(event);
     }
     return result;
+  }
+
+  _omitEvidence(event) {
+    for (const field of ['sources', 'propagation', 'ranges', 'stack'])
+      event[field] = [];
+    event.evidence_sampled = false;
+    event.truncated = true;
+    event.truncation_reason = 'evidence_sampled_out';
   }
 
   _enrichEvent(
