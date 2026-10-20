@@ -3,6 +3,11 @@
 
 ## Unreleased
 
+## 1.3.0 - 2026-10-20
+
+- Release the matching profiling component for Beacon Node.js 1.3.0 and update
+  the emitted `profiler_version` resource tag.
+
 ## 1.2.0 - 2026-10-03
 
 - Released with the matching Beacon Node.js product and Security component;
@@ -25,6 +30,7 @@
 ## 0.1.0 - 2026-09-28
 
 - Added the initial private Beacon profiling package.
-- Added wall and heap profile collection with a receiver-neutral HTTP exporter.
+- Added wall and heap profile collection with a receiver-neutral HTTP
+  exporter.
 - Kept the package private while receiver and package publication validation
   remain in progress.
