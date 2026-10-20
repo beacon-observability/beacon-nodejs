@@ -22,10 +22,19 @@ function pairMarks(pair) {
   return Array.isArray(pair?.m) ? pair.m : [];
 }
 
-function sink(state, rule, role, name, location, marks) {
+function sink(
+  state,
+  rule,
+  role,
+  name,
+  location,
+  marks,
+  input,
+  shell = 'unknown'
+) {
   // SecurityState records the observed sink site even when the current call
   // carries no taint; it filters clean marks and disabled rules itself.
-  state.sink(rule, role, name, location, marks || []);
+  state.sink(rule, role, name, location, marks || [], input, shell);
 }
 
 function fieldMarks(state, value, key) {
@@ -171,7 +180,10 @@ function sqlHandler(name) {
         'template',
         name,
         location,
-        queryTemplateMarks(args, state, sqlField)
+        queryTemplateMarks(args, state, sqlField),
+        typeof args[0]?.v === 'string'
+          ? args[0].v
+          : ownValue(args[0]?.v, sqlField)
       );
     },
   };
@@ -245,6 +257,8 @@ function explicitShellScript(executablePair, argvPair, state) {
   return {
     recognized: true,
     marks: marks.length ? marks : pairMarks(argvPair),
+    input: marks.length ? ownValue(argvPair.v, String(scriptIndex)) : undefined,
+    dialect: basename,
   };
 }
 
@@ -280,6 +294,59 @@ function shellEnabled(pair, state) {
   return false;
 }
 
+function shellDialect(options) {
+  if (options?.v && typeof options.v === 'object') {
+    let current = options.v;
+    for (let depth = 0; current && depth < 8; depth++) {
+      const descriptor = ownDescriptor(current, 'shell');
+      if (descriptor.unknown) return 'unknown';
+      if (descriptor.present) {
+        if (typeof descriptor.value === 'string')
+          return descriptor.value.replaceAll('\\', '/').split('/').at(-1);
+        return descriptor.value === true && process.platform !== 'win32'
+          ? 'sh'
+          : 'unknown';
+      }
+      try {
+        current = Object.getPrototypeOf(current);
+      } catch {
+        return 'unknown';
+      }
+    }
+    if (current) return 'unknown';
+  }
+  return process.platform !== 'win32' ? 'sh' : 'unknown';
+}
+
+function joinedShell(args, optionIndex, state) {
+  if (typeof args[0]?.v !== 'string') return {};
+  const parts = [args[0].v];
+  const marks = [...pairMarks(args[0])];
+  let length = parts[0].length;
+  const argv = optionIndex === 1 ? undefined : args[1]?.v;
+  if (argv !== undefined && !Array.isArray(argv)) return {};
+  if (argv && types.isProxy(argv)) return {};
+  if ((argv?.length || 0) > 64 || length > 8192) return {};
+  if (pairMarks(args[1]).length) return {}; // Container ranges do not locate argv text.
+  for (let index = 0; index < (argv?.length || 0); index++) {
+    const descriptor = ownDescriptor(argv, String(index));
+    if (descriptor.unknown || typeof descriptor.value !== 'string') return {};
+    const value = descriptor.value;
+    const offset = length + 1;
+    length = offset + value.length;
+    if (length > 8192) return {};
+    parts.push(value);
+    marks.push(
+      ...state.field(argv, String(index)).map(mark => ({
+        ...mark,
+        start: mark.start + offset,
+        end: mark.end + offset,
+      }))
+    );
+  }
+  return { input: parts.join(' '), marks: state.valid(marks) };
+}
+
 function childProcessHandler(name) {
   const fileCall = name.endsWith('File') || name.endsWith('FileSync');
   const spawnCall = name.startsWith('spawn');
@@ -297,7 +364,9 @@ function childProcessHandler(name) {
           'shell',
           `child_process.${name}`,
           location,
-          pairMarks(args[0])
+          pairMarks(args[0]),
+          args[0]?.v,
+          shellDialect(args[1])
         );
         return;
       }
@@ -340,13 +409,16 @@ function childProcessHandler(name) {
         return;
       }
       if (shell) {
+        const joined = joinedShell(args, optionIndex, state);
         sink(
           state,
           'command_injection',
           'shell',
           `child_process.${name}`,
           location,
-          state.valid([...executable, ...argv])
+          joined.marks || state.valid([...executable, ...argv]),
+          joined.input,
+          shellDialect(options)
         );
       } else {
         sink(
@@ -376,7 +448,9 @@ function childProcessHandler(name) {
             'shell',
             `child_process.${name}`,
             location,
-            scriptMarks
+            scriptMarks,
+            explicit.input,
+            explicit.dialect
           );
         }
       }

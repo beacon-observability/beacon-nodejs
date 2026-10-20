@@ -24,23 +24,40 @@ const identity = {
   runtime: { language: 'javascript' },
 };
 
-function occurrence(ledger, index, location = 'query') {
+function occurrence(ledger, index, location = 'query', fragment) {
   const state = new SecurityState(identity);
   ledger.begin(state);
   state.trace_id = index ? index.toString(16).padStart(32, '0') : '';
   state.server_span_id = index ? index.toString(16).padStart(16, '0') : '';
-  const marks = state.source(`input-${index}`, 'http.request.parameter', 'q');
+  const input =
+    fragment === undefined
+      ? undefined
+      : 'SELECT * FROM users WHERE id=' + fragment;
+  const marks = state
+    .source(input || `input-${index}`, 'http.request.parameter', 'q')
+    .map(mark => ({
+      ...mark,
+      start: input ? input.indexOf(fragment) : mark.start,
+    }));
   try {
     const event = state.sink(
       'sql_injection',
       'template',
       'db.query',
       location,
-      marks
+      marks,
+      input
     );
     assert.ok(event);
     assert.equal(
-      state.sink('sql_injection', 'template', 'db.query', location, marks),
+      state.sink(
+        'sql_injection',
+        'template',
+        'db.query',
+        location,
+        marks,
+        input
+      ),
       null
     );
     assert.equal(state.pending.length, 1);
@@ -111,74 +128,89 @@ test('interleaved asynchronous requests retain independent IDs and context', asy
   );
 });
 
-test('lightweight occurrences reach a real OTLP HTTP receiver', async () => {
-  const received = [];
-  const server = http.createServer(async (request, response) => {
-    const chunks = [];
-    for await (const chunk of request) chunks.push(chunk);
-    const body = JSON.parse(Buffer.concat(chunks).toString());
-    for (const resource of body.resourceLogs || [])
-      for (const scope of resource.scopeLogs || [])
-        received.push(...(scope.logRecords || []));
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.end('{}');
-  });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const output = await mkdtemp(join(tmpdir(), 'security-occurrences-'));
-  const provider = new LoggerProvider({
-    processors: [
-      new BatchLogRecordProcessor({
-        exporter: new OTLPLogExporter({
-          url: `http://127.0.0.1:${server.address().port}/v1/logs`,
+for (const fragments of [undefined, ['12', '1 OR 1=1', '14']]) {
+  test(`occurrences reach a real OTLP HTTP receiver (attack analysis: ${Boolean(fragments)})`, async () => {
+    if (fragments) process.env.BEACON_SECURITY_ANALYSIS_SQL_DIALECT = 'ansi';
+    else delete process.env.BEACON_SECURITY_ANALYSIS_SQL_DIALECT;
+    const received = [];
+    const server = http.createServer(async (request, response) => {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString());
+      for (const resource of body.resourceLogs || [])
+        for (const scope of resource.scopeLogs || [])
+          received.push(...(scope.logRecords || []));
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end('{}');
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const output = await mkdtemp(join(tmpdir(), 'security-occurrences-'));
+    const provider = new LoggerProvider({
+      processors: [
+        new BatchLogRecordProcessor({
+          exporter: new OTLPLogExporter({
+            url: `http://127.0.0.1:${server.address().port}/v1/logs`,
+          }),
         }),
-      }),
-    ],
-  });
-  logs.setGlobalLoggerProvider(provider);
-  const exporter = new Exporter(identity, 'otlp-occurrences', output);
-  try {
-    await exporter.initialization;
-    for (const index of [1, 2, 3])
+      ],
+    });
+    logs.setGlobalLoggerProvider(provider);
+    const exporter = new Exporter(identity, 'otlp-occurrences', output);
+    try {
+      await exporter.initialization;
+      for (const index of [1, 2, 3])
+        assert.equal(
+          exporter.emit(
+            occurrence(exporter.ledger, index, 'query', fragments?.[index - 1]),
+            { evidence: true }
+          ),
+          true
+        );
+      await exporter.close(5000);
+      await provider.forceFlush();
+      const findings = received
+        .map(log => ({ log, event: JSON.parse(log.body.stringValue) }))
+        .filter(({ event }) => event.event_name === 'beacon.security.finding');
       assert.equal(
-        exporter.emit(occurrence(exporter.ledger, index), { evidence: true }),
-        true
+        findings.length,
+        3,
+        JSON.stringify({
+          counters: exporter.counters,
+          received: received.map(
+            log => JSON.parse(log.body.stringValue).event_name
+          ),
+        })
       );
-    await exporter.close(5000);
-    await provider.forceFlush();
-    const findings = received
-      .map(log => ({ log, event: JSON.parse(log.body.stringValue) }))
-      .filter(({ event }) => event.event_name === 'beacon.security.finding');
-    assert.equal(
-      findings.length,
-      3,
-      JSON.stringify({
-        counters: exporter.counters,
-        received: received.map(
-          log => JSON.parse(log.body.stringValue).event_name
-        ),
-      })
-    );
-    assert.equal(
-      new Set(findings.map(({ event }) => event.finding_id)).size,
-      1
-    );
-    assert.equal(
-      new Set(findings.map(({ event }) => event.occurrence_id)).size,
-      3
-    );
-    assert.deepEqual(
-      findings.map(({ event }) => event.evidence_sampled),
-      [true, false, false]
-    );
-    assert.deepEqual(
-      findings.map(({ log }) => log.traceId.toLowerCase()),
-      [1, 2, 3].map(i => i.toString(16).padStart(32, '0'))
-    );
-  } finally {
-    await exporter.close(1000);
-    await provider.shutdown();
-    logs.disable();
-    await new Promise(resolve => server.close(resolve));
-    await rm(output, { recursive: true, force: true });
-  }
-});
+      assert.equal(
+        new Set(findings.map(({ event }) => event.finding_id)).size,
+        1
+      );
+      assert.equal(
+        new Set(findings.map(({ event }) => event.occurrence_id)).size,
+        3
+      );
+      assert.deepEqual(
+        findings.map(({ event }) => event.evidence_sampled),
+        [true, Boolean(fragments), false]
+      );
+      if (fragments) {
+        assert.deepEqual(
+          findings.map(({ event }) => event.attack_evidence.status),
+          ['no_evidence', 'suspected', 'no_evidence']
+        );
+        for (const { event } of findings)
+          assert.equal(event.attack_evidence.outcome, 'not_assessed');
+      }
+      assert.deepEqual(
+        findings.map(({ log }) => log.traceId.toLowerCase()),
+        [1, 2, 3].map(i => i.toString(16).padStart(32, '0'))
+      );
+    } finally {
+      await exporter.close(1000);
+      await provider.shutdown();
+      logs.disable();
+      await new Promise(resolve => server.close(resolve));
+      await rm(output, { recursive: true, force: true });
+    }
+  });
+}
