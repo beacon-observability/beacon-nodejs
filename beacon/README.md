@@ -7,6 +7,8 @@ cross-language documentation entry point is
 
 ## Status
 
+This source tree prepares version `1.3.0`, adding request-specific Security occurrences and attack evidence.
+
 The current public stable release is Beacon Node.js `1.2.0`. It provides the
 `@beacon-observability/nodejs` zero-code package and the matching
 `@beacon-observability/profiler-nodejs` and

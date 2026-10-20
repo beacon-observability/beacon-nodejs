@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMainThread } from 'node:worker_threads';
 
-export const VERSION = '1.2.0';
+export const VERSION = '1.3.0';
 export const RULES = Object.freeze([
   'sql_injection',
   'command_execution',
@@ -162,6 +162,9 @@ export function profile(adapters = []) {
         RULES.map(r => [r, flag('beacon.security.rules.' + r + '.enabled')])
       ),
       budgets,
+      analysis: {
+        sql_dialect: text('beacon.security.analysis.sql.dialect', 'unknown'),
+      },
     })
   );
 }

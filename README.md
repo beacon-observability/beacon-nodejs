@@ -5,8 +5,8 @@ the complete OpenTelemetry JavaScript Contrib source tree. This standalone
 downstream repository preserves the official upstream history while maintaining
 Beacon-specific features, tests, versions, and release processes independently.
 
-The source tree is preparing Beacon Node.js `1.2.0`; the current public stable
-version remains `1.1.0` until npm and GitHub release acceptance completes.
+The source tree is preparing Beacon Node.js `1.3.0`; the current public stable
+version remains `1.2.0` until npm and GitHub release acceptance completes.
 Users install the public `@beacon-observability/nodejs` package for zero-code
 auto-instrumentation and optional profiling and Security. Inherited
 OpenTelemetry packages keep their original names, versions, and release
@@ -19,10 +19,10 @@ and can optionally collect wall and heap profiles through the profiler. The
 profiling component exports a compatible `pprof` layout and is not an
 implementation of the OpenTelemetry Profiles signal.
 
-After the `1.2.0` release completes, install the exact product version with:
+After the `1.3.0` release completes, install the exact product version with:
 
 ```sh
-npm install @beacon-observability/nodejs@1.2.0
+npm install @beacon-observability/nodejs@1.3.0
 ```
 
 Run an unchanged application through the zero-code preload entry point:
