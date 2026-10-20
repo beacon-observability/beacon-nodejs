@@ -120,6 +120,8 @@ function lexical(value, marks, shell) {
       continue;
     }
     if (shell) {
+      if ('*?[]~'.includes(ch))
+        return evidence('unknown', 'shell_expansion_unsupported');
       if ('(){}<>'.includes(ch))
         return evidence('unknown', 'shell_syntax_unsupported');
       if (ch === '#' && (i === 0 || whitespace(value[i - 1]))) {
