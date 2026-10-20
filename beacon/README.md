@@ -7,14 +7,14 @@ cross-language documentation entry point is
 
 ## Status
 
-This source tree prepares version `1.3.0`, adding request-specific Security occurrences and attack evidence.
+Stable version `1.3.0` adds request-specific Security occurrences and conservative attack-evidence analysis.
 
-The current public stable release is Beacon Node.js `1.2.0`. It provides the
+The current public stable release is Beacon Node.js `1.3.0`. It provides the
 `@beacon-observability/nodejs` zero-code package and the matching
 `@beacon-observability/profiler-nodejs` and
 `@beacon-observability/security-nodejs` components. The public npm artifacts
 and GitHub Release passed the acceptance recorded in
-[the 1.2.0 validation record](validation/1.2.0.md). The repository is based on
+[the 1.3.0 validation record](validation/1.3.0.md). The repository is based on
 the official upstream `main` commit recorded when the project was established.
 That exact commit, rather than the moving branch name, is the reproducible
 baseline.
@@ -47,7 +47,7 @@ inherited upstream packages retain their own publication lifecycle.
 - [Verified Beacon-specific contributors](CONTRIBUTORS.md)
 - [Product version](version.properties)
 - [Release prerequisites](RELEASING.md)
-- [Beacon Node.js 1.2.0 release acceptance](validation/1.2.0.md)
+- [Beacon Node.js 1.3.0 release acceptance](validation/1.3.0.md)
 - [Beacon Node.js package documentation](../packages/nodejs/README.md)
 - [Profiler package documentation](../packages/profiler-nodejs/README.md)
 - [Security package documentation](../packages/security-nodejs/README.md)
