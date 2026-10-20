@@ -43,3 +43,27 @@ excluded roots are not transformed.
 ## License
 
 Apache 2.0
+
+## Finding occurrences and evidence sampling
+
+Security exports one `beacon.security.finding` per finding fingerprint per request.
+Requests share a stable `finding_id` but retain distinct `evidence_id` values
+(aliased as `occurrence_id`) and their own trace/span context. Same-request
+repeated detections count once. Requests without a trace are still exported;
+a trace ID does not guarantee that the backend retained that trace.
+
+`BEACON_SECURITY_FINDINGS_SAMPLE_SECONDS` (default `300`) controls full-evidence
+sampling, independently of occurrence delivery and trace sampling. Lightweight
+occurrences retain identity, sink, request context, and correlation with
+`evidence_sampled=false`, `evidence_sample_reason=interval`, and empty `sources`,
+`propagation`, `ranges`, and `stack` arrays. They declare `truncated=true` and
+`truncation_reason=evidence_sampled_out`; empty arrays do not mean absence of taint.
+
+`occurrences_total` is a process-local per-finding request count. If the
+aggregation table is full, bounded occurrence delivery continues with
+`aggregation_status=capacity_exceeded` and no total; tracked findings use
+`aggregation_status=tracked`. A representative snapshot may describe an earlier
+request than `last_trace_id`. Queue, rate, and byte limits remain in effect,
+health counters expose loss, and tiny byte budgets can produce
+`beacon.security.export.truncated` envelopes. Occurrence logs can increase
+volume and do not provide durable delivery.

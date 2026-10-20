@@ -452,8 +452,15 @@ export class Exporter {
         truncated: false,
       };
     const reduced = { ...original };
-    for (const field of ['propagation', 'ranges', 'sources'])
-      delete reduced[field];
+    for (const field of ['propagation', 'ranges', 'sources', 'stack']) {
+      if (original.event_name === 'beacon.security.finding')
+        reduced[field] = [];
+      else delete reduced[field];
+    }
+    if (original.event_name === 'beacon.security.finding') {
+      reduced.evidence_sampled = false;
+      reduced.evidence_sample_reason = 'record_byte_limit';
+    }
     reduced.truncated = true;
     reduced.truncation_reason = 'record_byte_limit';
     encoded = encode(reduced);
