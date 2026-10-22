@@ -14,6 +14,7 @@ const settings = {
   maxScanBytes: positive(data.settings?.maxScanBytes, 512 * 1024 * 1024),
   cacheSeconds: positive(data.settings?.cacheSeconds, 300),
   refreshSeconds: positive(data.settings?.refreshSeconds, 5),
+  healthSeconds: positive(data.settings?.healthSeconds, 60),
   maxQueue: positive(data.settings?.maxQueue, 4096),
 };
 
@@ -60,11 +61,20 @@ const state = {
   baseCache: null,
   baseCacheKey: '',
   baseCacheAt: 0,
+  baseGeneration: 0,
+  observationRevision: 0,
+  publishedInputs: '',
+  forcePublish: false,
+  lastPublishAt: 0,
+  lastHealthAt: 0,
+  loadedComponents: new Map(),
 };
 
 function positive(value, fallback) {
   const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
+  return Number.isFinite(number) && number > 0
+    ? Math.max(1, Math.floor(number))
+    : fallback;
 }
 
 function bounded(value, maximum = 2048) {
@@ -169,7 +179,7 @@ function within(filename, root) {
 }
 
 function packageNameFromKey(key) {
-  const value = bounded(key, 4096).replaceAll('\\', '/');
+  const value = '/' + bounded(key, 4096).replaceAll('\\', '/');
   const marker = '/node_modules/';
   const index = value.lastIndexOf(marker);
   if (index < 0) return '';
@@ -662,6 +672,7 @@ function scanNodeModules(
   }
   for (const entry of entries.slice(0, settings.maxEntries)) {
     if (!addEntry(context, reasons)) return;
+    if (entry.name.startsWith('.')) continue;
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const first = path.join(nodeModules, entry.name);
     if (entry.name.startsWith('@')) {
@@ -708,6 +719,51 @@ function findLockPath(root) {
   return safeStat(candidate)?.isFile() ? candidate : '';
 }
 
+function dependencyRoot(appRoot, context, reasons) {
+  let current = path.dirname(appRoot);
+  for (let depth = 0; depth < 32; depth++) {
+    const filename = path.join(current, 'package.json');
+    if (safeStat(filename)?.isFile()) {
+      const value = readJson(filename, context, reasons, 'workspace_package');
+      const workspaces = Array.isArray(value?.workspaces)
+        ? value.workspaces
+        : value?.workspaces?.packages;
+      const relative = path
+        .relative(current, appRoot)
+        .split(path.sep)
+        .join('/');
+      if (
+        Array.isArray(workspaces) &&
+        workspaces.some(pattern => {
+          if (
+            typeof pattern !== 'string' ||
+            pattern.length > 512 ||
+            pattern.startsWith('!')
+          )
+            return false;
+          const expression = pattern
+            .split('/')
+            .map(segment =>
+              segment === '**'
+                ? '.*'
+                : segment
+                    .split('*')
+                    .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+                    .join('[^/]*')
+            )
+            .join('/');
+          return new RegExp('^' + expression + '/?$').test(relative);
+        })
+      )
+        return current;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return appRoot;
+}
+
 function discoverRoot(root, context, reasons) {
   const packageCache = new Map();
   const records = new Map();
@@ -720,16 +776,17 @@ function discoverRoot(root, context, reasons) {
   if (!appRoot) return { records, pathRefs, dependencies, appRoots };
   appRoots.push(appRoot);
   const packageValue = findPackageJson(appRoot, context, reasons, packageCache);
-  const lockPath = findLockPath(appRoot);
+  const installRoot = dependencyRoot(appRoot, context, reasons);
+  const lockPath = findLockPath(installRoot);
   let lock = null;
   if (lockPath) lock = readJson(lockPath, context, reasons, 'package_lock');
   if (lock && lock.lockfileVersion !== 2 && lock.lockfileVersion !== 3) {
     markReason(reasons, 'unsupported_package_lock_version');
     lock = null;
   }
-  const pnpm = safeStat(path.join(appRoot, 'pnpm-lock.yaml'))?.isFile();
+  const pnpm = safeStat(path.join(installRoot, 'pnpm-lock.yaml'))?.isFile();
   const pnp = ['.pnp.cjs', '.pnp.js', '.pnp.data.json'].some(name =>
-    safeStat(path.join(appRoot, name))?.isFile()
+    safeStat(path.join(installRoot, name))?.isFile()
   );
   if (pnpm) {
     markReason(reasons, 'pnpm_lock_unsupported');
@@ -755,20 +812,17 @@ function discoverRoot(root, context, reasons) {
         typeof entry !== 'object'
       )
         continue;
-      const packageRoot = path.resolve(appRoot, key);
-      if (!within(packageRoot, appRoot)) {
+      const packageRoot = path.resolve(installRoot, key);
+      if (!within(packageRoot, installRoot)) {
         markReason(reasons, 'package_lock_path_escape');
         continue;
       }
-      const packageJson = findPackageJson(
-        packageRoot,
-        context,
-        reasons,
-        packageCache
-      );
+      const packageJson = safeStat(packageRoot)
+        ? findPackageJson(packageRoot, context, reasons, packageCache)
+        : null;
       addPackage({
         packageRoot,
-        root: appRoot,
+        root: installRoot,
         value: packageJson,
         lockEntry: entry,
         source: 'package-lock',
@@ -780,7 +834,9 @@ function discoverRoot(root, context, reasons) {
       });
     }
     const rootEntry =
-      packageEntries[''] && typeof packageEntries[''] === 'object'
+      installRoot === appRoot &&
+      packageEntries[''] &&
+      typeof packageEntries[''] === 'object'
         ? packageEntries['']
         : packageValue || {};
     pending.push({
@@ -791,11 +847,11 @@ function discoverRoot(root, context, reasons) {
   } else {
     markReason(reasons, 'runtime_dependency_graph_incomplete');
   }
-  const modulesPath = path.join(appRoot, 'node_modules');
+  const modulesPath = path.join(installRoot, 'node_modules');
   if (safeStat(modulesPath)?.isDirectory())
     scanNodeModules(
       modulesPath,
-      appRoot,
+      installRoot,
       records,
       pathRefs,
       pending,
@@ -811,7 +867,7 @@ function discoverRoot(root, context, reasons) {
       settings.maxEntries
     )) {
       const target = lookupPackageRef(
-        appRoot,
+        installRoot,
         item.packageRoot,
         dependencyName,
         pathRefs
@@ -1360,7 +1416,23 @@ function observeMapping(base, reasons) {
     }
     mapFor(parsed.path, parsed.url, parsed.query);
   }
-  return { byPath, byUrl, applicationRoots };
+  const byPackageRoot = Object.create(null);
+  let mappedRoots = 0;
+  for (const component of [...base.records.values()].sort(
+    (a, b) => Number(b.loaded) - Number(a.loaded)
+  )) {
+    for (const root of component.packageRoots) {
+      const normalized = path.resolve(root);
+      if (Object.hasOwn(byPackageRoot, normalized)) continue;
+      if (mappedRoots >= 4096) {
+        markReason(reasons, 'package_root_mapping_limit');
+        break;
+      }
+      byPackageRoot[normalized] = component.ref;
+      mappedRoots++;
+    }
+  }
+  return { byPath, byUrl, byPackageRoot, applicationRoots };
 }
 
 function discover() {
@@ -1386,10 +1458,12 @@ function discover() {
   const fingerprint = canonicalRoots
     .map(root => {
       const packageFile = path.join(root, 'package.json');
-      const lockFile = path.join(root, 'package-lock.json');
+      const installRoot = dependencyRoot(root, context, reasons);
+      const lockFile = path.join(installRoot, 'package-lock.json');
+      const workspaceStat = safeStat(path.join(installRoot, 'package.json'));
       const packageStat = safeStat(packageFile);
       const lockStat = safeStat(lockFile);
-      return `${root}|${packageStat?.size || 0}|${packageStat?.mtimeMs || 0}|${lockStat?.size || 0}|${lockStat?.mtimeMs || 0}`;
+      return `${root}|${installRoot}|${workspaceStat?.mtimeMs || 0}|${packageStat?.size || 0}|${packageStat?.mtimeMs || 0}|${lockStat?.size || 0}|${lockStat?.mtimeMs || 0}`;
     })
     .join('|');
   if (
@@ -1404,7 +1478,9 @@ function discover() {
     mergeBase(base, result);
   }
   base.reasons = reasons;
+  base.generation = ++state.baseGeneration;
   state.baseCache = {
+    generation: base.generation,
     records: new Map(
       [...base.records].map(([key, value]) => [key, cloneComponent(value)])
     ),
@@ -1450,6 +1526,7 @@ function snapshotPayload(
     content_sha256: contentSha256,
     byPath: mapping.byPath,
     byUrl: mapping.byUrl,
+    byPackageRoot: mapping.byPackageRoot,
     application_roots: mapping.applicationRoots,
     quality: quality(records),
     reasons: [...reasons].sort(),
@@ -1512,12 +1589,36 @@ function publish() {
   state.refreshing = true;
   try {
     const base = discover();
+    const buildStat = buildFile ? safeStat(buildFile) : null;
+    const inputs = `${base.generation}|${state.observationRevision}|${buildStat?.size || 0}|${buildStat?.mtimeMs || 0}`;
+    const force = state.forcePublish;
+    state.forcePublish = false;
+    if (!force && inputs === state.publishedInputs) {
+      if (Date.now() - state.lastHealthAt >= settings.healthSeconds * 1000) {
+        state.lastHealthAt = Date.now();
+        parentPort.postMessage({ type: 'event', event: health('current') });
+      }
+      return;
+    }
+    state.lastPublishAt = Date.now();
     const reasons = new Set(
       base.reasons || ['runtime_dependency_graph_incomplete']
     );
     const records = new Map(
       [...base.records].map(([key, value]) => [key, cloneComponent(value)])
     );
+    // URL-cache eviction is not a module unload. Retain bounded component
+    // membership for this process independently of resolution-cache entries.
+    for (const [ref, component] of state.loadedComponents) {
+      const current = records.get(ref);
+      if (current) current.loaded = true;
+      else if (records.size < settings.maxComponents - 1) {
+        const retained = cloneComponent(component);
+        retained.installed = false;
+        records.set(ref, retained);
+        markReason(reasons, 'loaded_component_no_longer_installed');
+      } else markReason(reasons, 'component_count_limit');
+    }
     const dependencies = new Map(
       [...base.dependencies].map(([key, values]) => [key, new Set(values)])
     );
@@ -1525,6 +1626,15 @@ function publish() {
       { records, appRoots: base.appRoots },
       reasons
     );
+    for (const [ref, component] of records) {
+      if (!component.loaded) continue;
+      if (
+        state.loadedComponents.has(ref) ||
+        state.loadedComponents.size < settings.maxComponents - 1
+      )
+        state.loadedComponents.set(ref, cloneComponent(component));
+      else markReason(reasons, 'loaded_component_limit');
+    }
     const context = {
       entries: base.budget?.entries || 0,
       scanBytes: base.budget?.scanBytes || 0,
@@ -1543,17 +1653,25 @@ function publish() {
       mapping: {
         byPath: mapping.byPath,
         byUrl: mapping.byUrl,
+        byPackageRoot: mapping.byPackageRoot,
         applicationRoots: mapping.applicationRoots,
       },
     };
     const contentSha256 = sha256(stableJson(stable));
     if (contentSha256 === state.published.contentSha256) {
+      state.publishedInputs = inputs;
       state.lastSuccessAt = nowIso();
       state.published.reasons = reasons;
-      parentPort.postMessage({
-        type: 'event',
-        event: health('current', reasons),
-      });
+      if (
+        force ||
+        Date.now() - state.lastHealthAt >= settings.healthSeconds * 1000
+      ) {
+        state.lastHealthAt = Date.now();
+        parentPort.postMessage({
+          type: 'event',
+          event: health('current', reasons),
+        });
+      }
       return;
     }
     const revision = state.published.revision + 1;
@@ -1611,6 +1729,8 @@ function publish() {
       quality: quality(records),
     };
     state.lastSuccessAt = nowIso();
+    state.publishedInputs = inputs;
+    state.lastHealthAt = Date.now();
     parentPort.postMessage({
       type: 'published',
       snapshot: snapshotPayload(
@@ -1655,10 +1775,13 @@ function publish() {
 function scheduleRefresh(delay = 10) {
   if (state.closing) return;
   if (state.pendingTimer) return;
-  state.pendingTimer = setTimeout(() => {
-    state.pendingTimer = null;
-    publish();
-  }, delay);
+  state.pendingTimer = setTimeout(
+    () => {
+      state.pendingTimer = null;
+      publish();
+    },
+    Math.max(delay, 100 - (Date.now() - state.lastPublishAt))
+  );
   state.pendingTimer.unref?.();
 }
 
@@ -1675,6 +1798,7 @@ parentPort.on('message', message => {
     const value = bounded(raw, 4096);
     if (!value) return { accepted: 0, dropped: 0 };
     const key = value;
+    if (state.observations.has(key)) return { accepted: 1, dropped: 0 };
     let dropped = 0;
     if (
       !state.observations.has(key) &&
@@ -1688,6 +1812,7 @@ parentPort.on('message', message => {
       scheduleRefresh(0);
     }
     state.observations.set(key, value);
+    state.observationRevision++;
     scheduleRefresh(10);
     return { accepted: 1, dropped };
   };
@@ -1717,6 +1842,7 @@ parentPort.on('message', message => {
       queue_size: state.observations.size,
     });
   } else if (message.type === 'refresh') {
+    state.forcePublish = true;
     scheduleRefresh(0);
   } else if (message.type === 'close') {
     if (state.refreshing) state.closeAfterRefresh = true;
@@ -1736,6 +1862,6 @@ parentPort.on('message', message => {
 
 const interval = setInterval(
   () => scheduleRefresh(0),
-  settings.refreshSeconds * 1000
+  Math.min(settings.refreshSeconds * 1000, 2_147_483_647)
 );
 interval.unref?.();
