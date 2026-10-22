@@ -44,6 +44,7 @@ npm run test:conformance --workspace=@beacon-observability/security-nodejs
 # Full Security tests require Node.js 22.22.3+ or 24.11.1+.
 npm test --workspace=@beacon-observability/security-nodejs
 node beacon/scripts/zero-code-smoke.mjs
+node beacon/scripts/review-smoke.mjs
 npm run lint:prettier
 npm run lint:markdown
 npm run lint:release-please
@@ -61,3 +62,14 @@ node beacon/scripts/zero-code-smoke.mjs
 
 Passing CI produces development evidence only. It does not publish artifacts or
 replace runtime, ingestion, performance, upgrade, or rollback acceptance.
+
+## Preload and termination regression checks
+
+`beacon/scripts/review-smoke.mjs` builds and installs the three candidate tarballs
+in an isolated application. It verifies lazy native loading and failure isolation,
+short-lived native profiling, native ESM instrumentation with and without an
+existing loader, resource identity correlation, and signal handling. On supported
+Security runtimes it also terminates an active request and checks actual OTLP Logs
+delivery before SDK shutdown. All receivers are local ephemeral HTTP servers.
+The workflow runs this check across the Beacon Node matrix; unsupported Security
+runtimes run the remaining preload/profiler checks.

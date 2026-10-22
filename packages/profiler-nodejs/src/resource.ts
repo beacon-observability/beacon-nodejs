@@ -42,6 +42,17 @@ export function buildProfilerTags(
   >
 ): Record<string, string> {
   const resourceAttributes = options.resource?.attributes ?? {};
+  const environmentAttributes: Record<string, string> = {};
+  for (const item of (process.env.OTEL_RESOURCE_ATTRIBUTES ?? '').split(',')) {
+    const index = item.indexOf('=');
+    if (index < 1) continue;
+    try {
+      environmentAttributes[decodeURIComponent(item.slice(0, index).trim())] =
+        decodeURIComponent(item.slice(index + 1).trim());
+    } catch {
+      /* Ignore malformed environment attributes as the SDK does. */
+    }
+  }
   const tags: Record<string, string> = {
     language: 'nodejs',
     runtime: 'Node.js',
@@ -53,6 +64,7 @@ export function buildProfilerTags(
       firstNonEmpty(
         options.hostName,
         attributeString(resourceAttributes[SEMRESATTRS_HOST_NAME]),
+        environmentAttributes[SEMRESATTRS_HOST_NAME],
         os.hostname()
       ) ?? os.hostname(),
     service:
@@ -60,13 +72,15 @@ export function buildProfilerTags(
         options.serviceName,
         attributeString(resourceAttributes[ATTR_SERVICE_NAME]),
         process.env.OTEL_SERVICE_NAME,
+        environmentAttributes[ATTR_SERVICE_NAME],
         DEFAULT_SERVICE_NAME
       ) ?? DEFAULT_SERVICE_NAME,
   };
 
   const version = firstNonEmpty(
     options.serviceVersion,
-    attributeString(resourceAttributes[ATTR_SERVICE_VERSION])
+    attributeString(resourceAttributes[ATTR_SERVICE_VERSION]),
+    environmentAttributes[ATTR_SERVICE_VERSION]
   );
   if (version !== undefined) {
     tags.version = version;
@@ -74,7 +88,10 @@ export function buildProfilerTags(
 
   const env = firstNonEmpty(
     options.deploymentEnvironment,
-    attributeString(resourceAttributes[SEMRESATTRS_DEPLOYMENT_ENVIRONMENT])
+    attributeString(resourceAttributes['deployment.environment.name']),
+    attributeString(resourceAttributes[SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]),
+    environmentAttributes['deployment.environment.name'] ??
+      environmentAttributes[SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]
   );
   if (env !== undefined) {
     tags.env = env;

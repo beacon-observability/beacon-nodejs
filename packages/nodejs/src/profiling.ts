@@ -4,7 +4,7 @@
  */
 
 import { diag } from '@opentelemetry/api';
-import {
+import type {
   HttpProfilingExporter,
   NodeProfiling,
 } from '@beacon-observability/profiler-nodejs';
@@ -25,8 +25,16 @@ interface ProfilingDependencies {
 }
 
 const defaultDependencies: ProfilingDependencies = {
-  createExporter: options => new HttpProfilingExporter(options),
-  createProfiler: options => new NodeProfiling(options),
+  createExporter: options => {
+    const { HttpProfilingExporter } =
+      require('@beacon-observability/profiler-nodejs') as typeof import('@beacon-observability/profiler-nodejs');
+    return new HttpProfilingExporter(options);
+  },
+  createProfiler: options => {
+    const { NodeProfiling } =
+      require('@beacon-observability/profiler-nodejs') as typeof import('@beacon-observability/profiler-nodejs');
+    return new NodeProfiling(options);
+  },
 };
 
 export function startProfilingFromEnv(
@@ -54,28 +62,35 @@ export function startProfilingFromEnv(
   const resourceAttributes = parseKeyValueList(env.OTEL_RESOURCE_ATTRIBUTES);
   const memoryEnabled = parseBoolean(env.OTEL_PROFILING_MEMORY_ENABLED, false);
 
-  const exporter = dependencies.createExporter({
-    endpoint,
-    headers: parseHeaders(env.OTEL_PROFILING_PPROF_HEADERS),
-  });
-  const profiler = dependencies.createProfiler({
-    exporter,
-    intervalMillis,
-    wallDurationMillis: Math.min(10_000, intervalMillis),
-    profileTypes: memoryEnabled ? ['wall', 'heap'] : ['wall'],
-    serviceName: nonEmpty(env.OTEL_SERVICE_NAME),
-    serviceVersion: resourceAttributes['service.version'],
-    deploymentEnvironment:
-      resourceAttributes['deployment.environment.name'] ??
-      resourceAttributes['deployment.environment'],
-    hostName: resourceAttributes['host.name'],
-  });
+  try {
+    const exporter = dependencies.createExporter({
+      endpoint,
+      headers: parseHeaders(env.OTEL_PROFILING_PPROF_HEADERS),
+    });
+    const profiler = dependencies.createProfiler({
+      exporter,
+      intervalMillis,
+      wallDurationMillis: Math.min(10_000, intervalMillis),
+      profileTypes: memoryEnabled ? ['wall', 'heap'] : ['wall'],
+      serviceName:
+        nonEmpty(env.OTEL_SERVICE_NAME) ??
+        nonEmpty(resourceAttributes['service.name']),
+      serviceVersion: resourceAttributes['service.version'],
+      deploymentEnvironment:
+        resourceAttributes['deployment.environment.name'] ??
+        resourceAttributes['deployment.environment'],
+      hostName: resourceAttributes['host.name'],
+    });
 
-  void profiler.start().then(
-    () => diag.info('Beacon Node.js profiling started successfully'),
-    error => diag.error('Unable to start Beacon Node.js profiling', error)
-  );
-  return profiler;
+    void profiler.start().then(
+      () => diag.info('Beacon Node.js profiling started successfully'),
+      error => diag.error('Unable to start Beacon Node.js profiling', error)
+    );
+    return profiler;
+  } catch (error) {
+    diag.error('Unable to initialize optional Beacon Node.js profiling', error);
+    return undefined;
+  }
 }
 
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
@@ -94,7 +109,7 @@ function positiveNumber(
     return fallback;
   }
   const parsed = Number(value);
-  if (Number.isFinite(parsed) && parsed > 0) {
+  if (Number.isFinite(parsed) && parsed >= 0.001 && parsed <= 2147483.647) {
     return parsed;
   }
   diag.warn(`${variableName} must be a positive number; using ${fallback}`);
@@ -127,7 +142,14 @@ function parseKeyValueList(
     const key = trimmed.slice(0, separatorIndex).trim();
     const itemValue = trimmed.slice(separatorIndex + 1).trim();
     if (key !== '') {
-      result[key] = itemValue;
+      if (allowColon) result[key] = itemValue;
+      else {
+        try {
+          result[decodeURIComponent(key)] = decodeURIComponent(itemValue);
+        } catch {
+          diag.warn('Invalid encoding in OTEL_RESOURCE_ATTRIBUTES');
+        }
+      }
     }
   }
   return result;

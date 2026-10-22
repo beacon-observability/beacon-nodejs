@@ -79,3 +79,19 @@ new HttpProfilingExporter({
 - The package is intended as a bridge for practical profiling integration in
   `opentelemetry-js-contrib`, not as a substitute for a future first-class
   OpenTelemetry Profiles SDK in `opentelemetry-js`.
+
+## Collection lifecycle
+
+The native profiler is loaded only when collection starts. Automatic wall
+collection uses an unreferenced timer so it does not keep an idle CLI or batch
+application alive. Shutdown cancels and discards an unfinished wall
+sample, waits for an export already in progress, and stops heap sampling. An
+explicit `collectOnce()` remains an awaited, referenced collection. Repeated
+shutdown calls share one completion promise.
+
+Programmatic `intervalMillis` and `wallDurationMillis` must be finite and between
+1 and 2,147,483,647 milliseconds; invalid values throw `RangeError` instead of
+becoming a 1ms Node timer. The zero-code environment adapter warns and uses the
+default for invalid interval seconds. Service/version/environment/host tags can
+fall back to decoded standard OTel resource attributes. Explicit options and
+Resource attributes remain higher-priority API inputs.
