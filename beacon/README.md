@@ -7,9 +7,10 @@ cross-language documentation entry point is
 
 ## Status
 
-Stable version `1.3.0` adds request-specific Security occurrences and conservative attack-evidence analysis.
+Release candidate `1.3.1` adds preload/profiler lifecycle fixes and bounded workspace SBOM improvements.
 
-The current public stable release is Beacon Node.js `1.3.0`. It provides the
+The current public stable release is Beacon Node.js `1.3.0`; `1.3.1` is the
+release candidate undergoing validation. It provides the
 `@beacon-observability/nodejs` zero-code package and the matching
 `@beacon-observability/profiler-nodejs` and
 `@beacon-observability/security-nodejs` components. The public npm artifacts

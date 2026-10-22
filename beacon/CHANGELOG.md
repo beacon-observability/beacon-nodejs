@@ -7,6 +7,20 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+## 1.3.1 - 2026-10-22
+
+- Coordinate Security, profiler and SDK shutdown before restoring sole-owner
+  signal termination, while allowing application-owned graceful draining.
+- Restore Security-disabled ESM preload instrumentation and load the optional
+  native profiler only when requested, with initialization failure isolation.
+- Prevent background wall sampling from retaining idle applications, bound timer
+  configuration, and align decoded profile resource identity with traces.
+- Reduce unchanged SBOM refresh work and health volume, retain loaded membership
+  after URL-cache eviction, and discover hoisted npm workspace dependencies with
+  correct declared package identities.
+- Preserve schema/fingerprint version 1 and default-disabled Security. Corrected
+  workspace discovery can increase the inventory size and memory requirements.
+
 ## 1.3.0 - 2026-10-20
 
 - Export a request-specific finding occurrence and trace/span correlation

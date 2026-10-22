@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 1.3.1 - 2026-10-22
+
+- Skip full unchanged SBOM publication work, lower default health heartbeat to
+  60 seconds, and coalesce observation bursts with bounded publication delay.
+- Retain bounded loaded-component membership independently of URL-cache eviction
+  and preserve package attribution through a bounded package-root map.
+- Discover hoisted npm workspace dependencies separately from business roots;
+  retain top-level/scoped lock identities and skip dot tooling directories.
+- Preserve existing scan and coverage limits. Larger corrected inventories can
+  consume more memory; unsupported package managers remain explicitly uncertain.
+
 ## 1.3.0 - 2026-10-20
 
 - Export a request-specific finding occurrence and trace/span correlation
