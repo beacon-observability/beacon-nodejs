@@ -99,3 +99,24 @@ Node.js `18.19+`, `20.6+`, `22`, and `24` are covered by the Beacon CI matrix.
 ## License
 
 Apache 2.0
+
+## Preload and shutdown behavior
+
+For native ESM dependencies, use `--import @beacon-observability/nodejs/register`.
+The Security-disabled ESM entry installs the OTel module loader before starting
+the SDK; enabling Security uses its compatible synchronous loader instead.
+CommonJS `--require` remains available for CommonJS applications.
+
+The zero-code entry owns one SDK and closes Security, profiling, then the SDK so
+Security can emit final occurrences before the shared Logs provider closes. If
+Beacon is the sole signal handler, the first SIGINT/SIGTERM allows bounded cleanup
+(up to 2.5 seconds) and then restores signal termination. Application-owned signal
+handlers retain their exit policy and can drain requests before normal
+`beforeExit` cleanup. An application that calls `process.exit()` or is forcibly
+killed bypasses asynchronous completion; delivery is not guaranteed.
+
+Disabled profiling does not load its native addon, including when importing the
+public API. Requested profiling that cannot initialize produces a diagnostic
+without preventing application/tracing startup. `OTEL_SERVICE_NAME` takes
+precedence over the percent-decoded `service.name` in `OTEL_RESOURCE_ATTRIBUTES`;
+profile resource tags follow the same environment identity.

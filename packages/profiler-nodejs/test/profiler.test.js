@@ -49,6 +49,8 @@ describe('NodeProfiling', () => {
       heapStart: pprof.heap.start,
       heapStop: pprof.heap.stop,
       timeProfile: pprof.time.profile,
+      timeStart: pprof.time.start,
+      timeStop: pprof.time.stop,
     };
 
     pprof.time.profile = async options => {
@@ -66,6 +68,22 @@ describe('NodeProfiling', () => {
             ],
       });
     };
+    pprof.time.start = options => {
+      timeProfileCalls.push(options);
+    };
+    pprof.time.stop = () =>
+      makeProfile({
+        sampleTypes: timeProfileCalls.at(-1).collectCpuTime
+          ? [
+              ['sample', 'count', 3],
+              ['wall', 'nanoseconds', 30],
+              ['cpu', 'nanoseconds', 20],
+            ]
+          : [
+              ['sample', 'count', 3],
+              ['wall', 'nanoseconds', 30],
+            ],
+      });
     pprof.heap.start = () => {};
     pprof.heap.profile = () =>
       makeProfile({
@@ -82,6 +100,8 @@ describe('NodeProfiling', () => {
     pprof.heap.start = originals.heapStart;
     pprof.heap.stop = originals.heapStop;
     pprof.time.profile = originals.timeProfile;
+    pprof.time.start = originals.timeStart;
+    pprof.time.stop = originals.timeStop;
   });
 
   function loadNodeProfiling() {
@@ -95,7 +115,7 @@ describe('NodeProfiling', () => {
     const profiler = new NodeProfiling({
       exporter,
       intervalMillis: 10_000,
-      wallDurationMillis: 1_000,
+      wallDurationMillis: 10,
       profileTypes: ['wall', 'heap'],
       ...options,
     });
@@ -116,7 +136,7 @@ describe('NodeProfiling', () => {
     ]);
 
     assert.deepEqual(timeProfileCalls[0], {
-      durationMillis: 1_000,
+      durationMillis: 10,
       collectCpuTime: true,
       useCPED: supportsCPED,
       withContexts: true,
@@ -144,7 +164,7 @@ describe('NodeProfiling', () => {
     ]);
 
     assert.deepEqual(timeProfileCalls[0], {
-      durationMillis: 1_000,
+      durationMillis: 10,
       collectCpuTime: false,
       useCPED: false,
       withContexts: false,
@@ -161,7 +181,7 @@ describe('NodeProfiling', () => {
     });
 
     assert.deepEqual(timeProfileCalls[0], {
-      durationMillis: 1_000,
+      durationMillis: 10,
       collectCpuTime: false,
       useCPED: false,
       withContexts: false,
@@ -175,14 +195,14 @@ describe('NodeProfiling', () => {
     });
 
     assert.deepEqual(timeProfileCalls[0], {
-      durationMillis: 1_000,
+      durationMillis: 10,
       collectCpuTime: true,
       useCPED: supportsCPED,
       withContexts: true,
     });
   });
 
-  it('collects the first profile immediately after startup', async () => {
+  it('starts collection immediately and cancels an unfinished background profile on shutdown', async () => {
     const NodeProfiling = loadNodeProfiling();
     const profiler = new NodeProfiling({
       exporter,
@@ -195,7 +215,45 @@ describe('NodeProfiling', () => {
     await profiler.shutdown();
 
     assert.equal(timeProfileCalls.length, 1);
+    assert.equal(exportedBatches.length, 0);
+  });
+
+  it('exports completed background profiles and bounds timer configuration', async () => {
+    const NodeProfiling = loadNodeProfiling();
+    for (const value of [0, -1, NaN, Infinity, 2147483648]) {
+      assert.throws(
+        () => new NodeProfiling({ exporter, intervalMillis: value }),
+        RangeError
+      );
+      assert.throws(
+        () => new NodeProfiling({ exporter, wallDurationMillis: value }),
+        RangeError
+      );
+    }
+    const profiler = new NodeProfiling({
+      exporter,
+      intervalMillis: 1000,
+      wallDurationMillis: 10,
+      profileTypes: ['wall'],
+    });
+    await profiler.start();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await profiler.shutdown();
     assert.equal(exportedBatches.length, 1);
+  });
+
+  it('cancels an explicit in-flight collection and makes shutdown idempotent', async () => {
+    const NodeProfiling = loadNodeProfiling();
+    const profiler = new NodeProfiling({
+      exporter,
+      wallDurationMillis: 60000,
+      profileTypes: ['wall'],
+    });
+    const collecting = profiler.collectOnce();
+    const stopping = profiler.shutdown();
+    assert.equal(profiler.shutdown(), stopping);
+    await Promise.all([collecting, stopping]);
+    assert.equal(exportedBatches.length, 0);
   });
 });
 
