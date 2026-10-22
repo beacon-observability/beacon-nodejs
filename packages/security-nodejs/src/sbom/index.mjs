@@ -246,6 +246,7 @@ export class SbomInventory {
         'beacon.security.sbom.refresh.seconds',
         DEFAULTS.refreshSeconds
       ),
+      healthSeconds: configuredLimit('beacon.security.sbom.health.seconds', 60),
       maxQueue: Math.max(
         1,
         Math.min(
@@ -270,6 +271,7 @@ export class SbomInventory {
       application_id: this.identity.application_id,
       byPath: Object.freeze(Object.create(null)),
       byUrl: Object.freeze(Object.create(null)),
+      byPackageRoot: Object.freeze(Object.create(null)),
       applicationRoots: Object.freeze([]),
     });
   }
@@ -364,6 +366,18 @@ export class SbomInventory {
     }
     const match = snapshot.byUrl[lookup.url] || snapshot.byPath[lookup.path];
     if (!match) {
+      let parent = lookup.path;
+      for (let depth = 0; depth < 64; depth++) {
+        const ref = snapshot.byPackageRoot?.[parent];
+        if (ref)
+          return componentReference(
+            { ...result, status: 'resolved', 'bom-ref': ref },
+            this.identity.application_id
+          );
+        const next = path.dirname(parent);
+        if (next === parent) break;
+        parent = next;
+      }
       const applicationRoot = snapshot.applicationRoots.find(root =>
         withinPath(lookup.path, root)
       );
@@ -493,6 +507,9 @@ export class SbomInventory {
       const snapshot = message.snapshot || {};
       const byPath = Object.freeze({ ...(snapshot.byPath || {}) });
       const byUrl = Object.freeze({ ...(snapshot.byUrl || {}) });
+      const byPackageRoot = Object.freeze({
+        ...(snapshot.byPackageRoot || {}),
+      });
       const applicationRoots = Object.freeze(
         Array.isArray(snapshot.application_roots)
           ? snapshot.application_roots
@@ -508,6 +525,7 @@ export class SbomInventory {
         application_id: this.identity.application_id,
         byPath,
         byUrl,
+        byPackageRoot,
         applicationRoots,
       });
       for (const event of Array.isArray(message.events) ? message.events : [])

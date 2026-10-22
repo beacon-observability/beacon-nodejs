@@ -291,6 +291,9 @@ test(
       );
       assert.deepEqual(updated.dependencies, [
         { name: 'trusted-pkg', version: '2.0.0' },
+        // Removing a loaded module's on-disk file does not unload its code
+        // from this process. Keep observed membership and report unreadability.
+        { name: 'trusted-pkg', version: '3.0.0' },
         { name: 'trusted-pkg-extra', version: '4.0.0' },
       ]);
     } finally {
