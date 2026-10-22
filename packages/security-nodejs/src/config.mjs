@@ -84,9 +84,14 @@ export const instrumentationIsEnabled = () => instrumentationActive;
 export function loaderCompatibility(compatible) {
   loaderCompatible = compatible;
 }
-export function collectionConfigured() {
+let environmentCollectionEnabled;
+export function collectionConfigured(refresh = true) {
+  // Environment changes are observed at admission/loader/control boundaries;
+  // per-expression checks only read the snapshot and live API/loader flags.
+  if (refresh || environmentCollectionEnabled === undefined)
+    environmentCollectionEnabled = flag('beacon.security.enabled', false);
   return (
-    flag('beacon.security.enabled', false) &&
+    environmentCollectionEnabled &&
     includeRoots.length > 0 &&
     supportedRuntime() &&
     loaderCompatible &&

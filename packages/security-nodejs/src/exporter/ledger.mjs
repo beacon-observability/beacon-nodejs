@@ -162,8 +162,8 @@ export class RuntimeLedger {
     this.requestsPerSecond = limit('beacon.security.requests-per-second', 1000);
   }
 
-  enabled() {
-    return collectionConfigured() && !this.paused();
+  enabled(refresh = true) {
+    return collectionConfigured(refresh) && !this.paused();
   }
 
   paused() {

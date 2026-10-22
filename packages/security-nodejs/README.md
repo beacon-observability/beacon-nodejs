@@ -102,3 +102,48 @@ a weaker request cannot replace a stronger representative.
 `attack_evidence_counts` partitions process-local request occurrences by the
 three statuses, and `strongest_attack_evidence` describes the strongest retained
 status. These counters do not represent confirmed attacks or exploit successes.
+
+## Runtime and delivery safeguards
+
+Common string trimming, case conversion, replacement, splitting, padding, and
+JSON data flows retain bounded provenance. Trimming, ASCII case changes and simple string splits
+retain exact UTF-16 ranges; Unicode case expansion, replacement, regular-expression splits,
+and JSON conversions use conservative ranges when an exact mapping was not
+observed. Replacement/replacer/reviver callbacks run once with their original
+business arguments. Custom serialization and accessor boundaries remain explicit
+coverage gaps. Normalization is not a sanitizer or a safety verdict.
+
+Eligible synchronous and asynchronous functions use their original expressions
+when no live request context exists. AsyncLocalStorage retains that absence across
+await continuations. Escaping closures, dynamic scope and writes to enclosing
+bindings retain instrumentation. Paused request contexts also
+retain instrumentation because collection can resume. Per-expression enablement
+checks reuse an environment snapshot; environment changes are refreshed at
+request admission, loader checks and control ticks. API enable/disable, loader
+compatibility and pause state remain live.
+
+Default Error stacks retain business caller depth without installing a global
+`Error.prepareStackTrace` hook. Application formatters, custom name/message
+accessors and explicitly assigned stacks remain under application control. Request
+completion observes response errors through `errorMonitor`, preserving otherwise
+unhandled errors, and completed requests cannot acquire a new state.
+
+Equivalent bounded Express query snapshots can share immutable tracking records.
+Writes detach the record before changing its marks. `max.objects` counts distinct
+tracking records; each additional weak object alias is charged to the request's
+tracked-byte budget, and snapshot caches are cleared at request completion.
+
+The Security export queue prioritizes suspected evidence above diagnostics and
+ordinary occurrences. Higher-priority records can evict queued lower-priority
+records. By default, 10 percent of the event and byte budgets is reserved for
+suspected evidence; `BEACON_SECURITY_EXPORT_PRIORITY_RESERVED_PERCENT` accepts
+0 through 50. Event reservations round down, so very small event limits may
+reserve zero events. Loss diagnostics retain their existing budget exception.
+Loss counters identify ordinary, diagnostic and suspected records, and priority
+evictions have a separate counter. Total limits remain bounded, ordinary
+occurrences keep their distinct identities, and stronger evidence can still be
+dropped when its capacity is exhausted. Delivery remains best effort.
+
+When using a host-owned SDK, call and await Security `shutdown()` before shutting
+down the host LoggerProvider/SDK. Forced process termination and exhausted
+shutdown deadlines can still lose records.

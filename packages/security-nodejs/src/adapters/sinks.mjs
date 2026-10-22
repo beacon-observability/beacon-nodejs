@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { types } from 'node:util';
+import { constants as fsConstants } from 'node:fs';
 import {
   installBuiltins as installModelBuiltins,
   registerModel,
@@ -243,7 +244,43 @@ function explicitShellScript(executablePair, argvPair, state) {
       state.gap('child_process.argv_accessor');
       return { recognized: true, unknown: true, marks: pairMarks(argvPair) };
     }
-    if (flags.has(descriptor?.value)) {
+    const argument = descriptor?.value;
+    if (typeof argument !== 'string')
+      return {
+        recognized: true,
+        unknown: true,
+        marks: arrayMarks(argvPair, state),
+      };
+    if (flags.has(windows ? argument.toLowerCase() : argument)) {
+      scriptIndex = index + 1;
+      break;
+    }
+    if (
+      argument === '--' ||
+      argument === '-' ||
+      !(windows ? /^[-/]/ : /^[-+]/).test(argument)
+    )
+      break;
+    if (windows) {
+      if (['-file', '-f'].includes(argument.toLowerCase())) break;
+      continue;
+    }
+    if (['--rcfile', '--init-file', '-o', '-O'].includes(argument)) {
+      index++;
+      continue;
+    }
+    if (argument.startsWith('--')) continue;
+    let command = false;
+    for (let flag = 1; flag < argument.length; flag++) {
+      const option = argument[flag];
+      // -o/-O consume the remainder or the following argument as their value.
+      if (option === 'o' || option === 'O') {
+        if (flag === argument.length - 1) index++;
+        break;
+      }
+      if (option === 'c' && argument[0] === '-') command = true;
+    }
+    if (command) {
       scriptIndex = index + 1;
       break;
     }
@@ -1074,6 +1111,17 @@ function fsHandler(name, promisifyHandler = false) {
           location,
           pathMarks(args[1], state)
         );
+      } else if (baseName === 'symlink') {
+        // The first operand is the link's contents; the second is the path
+        // where a filesystem entry is created.
+        sink(
+          state,
+          'path_traversal',
+          'target',
+          `fs.${name}`,
+          location,
+          pathMarks(args[1], state)
+        );
       } else if (deleteMethods.has(baseName) || write.has(baseName)) {
         sink(
           state,
@@ -1084,8 +1132,18 @@ function fsHandler(name, promisifyHandler = false) {
           pathMarks(args[0], state)
         );
       } else if (baseName === 'open') {
-        const flags = bounded(args[1]?.v, 64).toLowerCase();
-        const target = /[wax+]/.test(flags) ? 'target' : 'source';
+        const flags = args[1]?.v;
+        const writing =
+          typeof flags === 'number'
+            ? (flags &
+                (fsConstants.O_WRONLY |
+                  fsConstants.O_RDWR |
+                  fsConstants.O_CREAT |
+                  fsConstants.O_TRUNC |
+                  fsConstants.O_APPEND)) !==
+              0
+            : /[wax+]/.test(bounded(flags, 64).toLowerCase());
+        const target = writing ? 'target' : 'source';
         sink(
           state,
           'path_traversal',

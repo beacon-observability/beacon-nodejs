@@ -85,6 +85,7 @@ function lexical(value, marks, shell) {
     tainted.fill(1, mark.start, mark.end);
   }
   let quote = '',
+    quoteTainted = false,
     suspected = false,
     identifier = false,
     commandStart = true,
@@ -105,18 +106,31 @@ function lexical(value, marks, shell) {
     }
     if (shell && quote !== "'" && '$`'.includes(ch))
       return evidence('unknown', 'shell_expansion_unsupported');
-    if (!shell && '\\$`[]'.includes(ch))
+    // A backslash can indicate a dialect-specific quoted-string escape. Keep
+    // that ambiguity unknown, but ordinary $/brackets inside ANSI literals
+    // are data rather than dollar quoting or bracket identifier syntax.
+    if (
+      !shell &&
+      ((!quote && '\\$`[]'.includes(ch)) ||
+        (quote && ch === '\\' && next === quote))
+    )
       return evidence('unknown', 'sql_syntax_unsupported');
     if (quote) {
       if (ch === quote) {
         if (!shell && next === quote) i++;
-        else quote = '';
+        else {
+          // Changing a trusted literal's boundary is structural evidence even
+          // when the injected text contains no operator or shell separator.
+          suspected ||= Boolean(tainted[i]) !== quoteTainted;
+          quote = '';
+        }
       } else if (!shell && quote === '"' && tainted[i]) identifier = true;
       continue;
     }
     if (ch === "'" || ch === '"') {
       commandStart = false;
       quote = ch;
+      quoteTainted = Boolean(tainted[i]);
       continue;
     }
     if (shell) {
@@ -156,10 +170,15 @@ function lexical(value, marks, shell) {
       if (ch === '(') parentheses++;
       else if (ch === ')' && --parentheses < 0)
         return evidence('unknown', 'syntax_incomplete');
-      let previous = i - 1;
-      while (previous >= 0 && whitespace(value[previous])) previous--;
-      const numericSign = previous < 0 || '=<>(,'.includes(value[previous]);
-      if (digit(ch) || ('-+'.includes(ch) && digit(next) && numericSign)) {
+      let numericSign = false;
+      // Only a candidate numeric sign needs preceding context. Each whitespace
+      // run is then visited at most once here, rather than once per space.
+      if ('-+'.includes(ch) && digit(next)) {
+        let previous = i - 1;
+        while (previous >= 0 && whitespace(value[previous])) previous--;
+        numericSign = previous < 0 || '=<>(,'.includes(value[previous]);
+      }
+      if (digit(ch) || numericSign) {
         let decimal = false;
         while (
           i + 1 < value.length &&

@@ -1,4 +1,5 @@
-import { model } from '../core/calls.mjs';
+import { model, invoke } from '../core/calls.mjs';
+import { p } from '../core/values.mjs';
 import path from 'node:path';
 import { URL as NativeURL } from 'node:url';
 import { types } from 'node:util';
@@ -693,6 +694,306 @@ function registerStringAndArray() {
   register(String.prototype.substr, { after: stringSliceAfter('substr') });
   register(String.prototype.concat, { after: stringConcatAfter });
   register(Array.prototype.join, { after: arrayJoinAfter });
+  for (const name of ['trim', 'trimStart', 'trimEnd', 'trimLeft', 'trimRight'])
+    register(String.prototype[name], { after: trimAfter(name) });
+  for (const name of [
+    'toLowerCase',
+    'toUpperCase',
+    'toLocaleLowerCase',
+    'toLocaleUpperCase',
+    'padStart',
+    'padEnd',
+  ])
+    register(String.prototype[name], { after: stringConversionAfter(name) });
+  for (const name of ['replace', 'replaceAll'])
+    register(String.prototype[name], {
+      after: stringConversionAfter(name),
+      prepare: replacementPrepare,
+    });
+  register(String.prototype.split, { after: splitAfter });
+  register(JSON.stringify, {
+    after: stringifyAfter,
+    prepare: jsonPrepare('stringify'),
+  });
+  register(JSON.parse, { after: parseAfter, prepare: jsonPrepare('parse') });
+}
+
+const MAX_MODEL_STRING = 8192;
+const nativeTrimStart = String.prototype.trimStart;
+
+function trimAfter(name) {
+  return (value, _args, receiver, location, state) => {
+    if (!isString(value) || !isString(receiver?.v)) return [];
+    if (receiver.v.length > MAX_MODEL_STRING)
+      return converted(
+        state,
+        marks(receiver),
+        value,
+        `string.${name}`,
+        location
+      );
+    const start = ['trimEnd', 'trimRight'].includes(name)
+      ? 0
+      : receiver.v.length -
+        Reflect.apply(nativeTrimStart, receiver.v, []).length;
+    return state.step(marks(receiver), `string.${name}`, location, {
+      from: start,
+      to: start + value.length,
+      offset: -start,
+      length: value.length,
+    });
+  };
+}
+
+function stringConversionAfter(name) {
+  return (value, args, receiver, location, state) => {
+    if (!isString(value)) return [];
+    const simpleCase = name === 'toLowerCase' || name === 'toUpperCase';
+    const relevant = simpleCase
+      ? []
+      : args.slice(0, name.startsWith('toLocale') ? 1 : 2);
+    const source = mergeMarks(state, [marks(receiver), ...relevant.map(marks)]);
+    // Changed text may have expanded Unicode characters, replacement tokens,
+    // callbacks or repeated padding. Preserve provenance without claiming an
+    // exact mapping that was not observed during the native operation.
+    if (
+      (value === receiver?.v ||
+        (simpleCase &&
+          isString(receiver?.v) &&
+          receiver.v.length <= MAX_MODEL_STRING &&
+          value.length === receiver.v.length &&
+          /^[\x00-\x7f]*$/.test(receiver.v) &&
+          /^[\x00-\x7f]*$/.test(value))) &&
+      !relevant.some(arg => marks(arg).length)
+    )
+      return state.step(source, `string.${name}`, location, {
+        length: value.length,
+      });
+    return converted(state, source, value, `string.${name}`, location);
+  };
+}
+
+function replacementPrepare(args, receiver, location, state) {
+  const replacement = args[1]?.v;
+  if (typeof replacement !== 'function') return;
+  const actual = args.map(arg => arg.v);
+  const returned = [];
+  actual[1] = function (...parameters) {
+    const result = invoke(
+      { v: replacement, receiver: p(this) },
+      parameters.map(value =>
+        p(
+          value,
+          converted(
+            state,
+            marks(receiver),
+            value,
+            'string.replace.callback',
+            location
+          )
+        )
+      ),
+      location
+    );
+    if (returned.length < state.maxMarks)
+      returned.push(...result.m.slice(0, state.maxMarks - returned.length));
+    return result.v;
+  };
+  return {
+    args: actual,
+    after(value, previous) {
+      return mergeMarks(state, [
+        previous,
+        converted(
+          state,
+          returned,
+          value,
+          'string.replace.callback.result',
+          location
+        ),
+      ]);
+    },
+  };
+}
+
+function splitAfter(value, args, receiver, location, state) {
+  if (!Array.isArray(value) || types.isProxy(value) || !isString(receiver?.v))
+    return [];
+  const separator = args[0]?.v;
+  const exact =
+    (separator === undefined || typeof separator === 'string') &&
+    receiver.v.length <= MAX_MODEL_STRING;
+  let offset = 0;
+  for (let i = 0; i < Math.min(value.length, 4096); i++) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
+    if (!descriptor || !('value' in descriptor) || !isString(descriptor.value))
+      continue;
+    const text = descriptor.value;
+    const source = exact
+      ? state.step(marks(receiver), 'string.split', location, {
+          from: offset,
+          to: offset + text.length,
+          offset: -offset,
+          length: text.length,
+        })
+      : converted(state, marks(receiver), text, 'string.split', location);
+    state.putField(
+      value,
+      String(i),
+      mergeMarks(state, [
+        source,
+        converted(
+          state,
+          marks(args[0]),
+          text,
+          'string.split.separator',
+          location
+        ),
+      ])
+    );
+    offset += text.length + (separator?.length || 0);
+  }
+  if (value.length > 4096) state.gap('string.split_element_limit');
+  return [];
+}
+
+function jsonMarks(pair, state) {
+  const result = [marks(pair)];
+  const seen = new Set();
+  let remaining = 512;
+  let fields = 4096;
+  const visit = value => {
+    if (!value || typeof value !== 'object' || seen.has(value)) return;
+    if (--remaining < 0 || types.isProxy(value)) {
+      state.gap('json_object_boundary');
+      return;
+    }
+    seen.add(value);
+    const prototype = Object.getPrototypeOf(value);
+    const toJSON = Object.getOwnPropertyDescriptor(value, 'toJSON');
+    if (
+      (!Array.isArray(value) &&
+        prototype !== null &&
+        prototype !== Object.prototype) ||
+      (toJSON && (!('value' in toJSON) || typeof toJSON.value === 'function'))
+    )
+      state.gap('json_custom_serialization_boundary');
+    const record = state.record(value);
+    if (record) {
+      result.push(record.marks);
+      for (const marks of record.fields.values()) {
+        if (--fields < 0) {
+          state.gap('json_field_limit');
+          break;
+        }
+        result.push(marks);
+      }
+    }
+    for (const key of Object.keys(value).slice(0, 128)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor && 'value' in descriptor) visit(descriptor.value);
+      else state.gap('json_accessor_boundary');
+    }
+  };
+  visit(pair?.v);
+  return mergeMarks(state, result);
+}
+
+function jsonPrepare(mode) {
+  return (args, _receiver, location, state) => {
+    const callback = args[1]?.v;
+    if (typeof callback !== 'function') return;
+    const source = jsonMarks(args[0], state),
+      returned = [];
+    const actual = args.map(arg => arg.v);
+    actual[1] = function (...parameters) {
+      const result = invoke(
+        { v: callback, receiver: p(this) },
+        parameters.map((value, index) =>
+          p(
+            value,
+            index === 1
+              ? converted(
+                  state,
+                  source,
+                  value,
+                  `json.${mode}.callback`,
+                  location
+                )
+              : []
+          )
+        ),
+        location
+      );
+      if (returned.length < state.maxMarks)
+        returned.push(
+          ...jsonMarks(result, state).slice(0, state.maxMarks - returned.length)
+        );
+      return result.v;
+    };
+    return {
+      args: actual,
+      after(value, previous) {
+        if (mode === 'parse') {
+          const propagated = parseAfter(
+            value,
+            [{ m: mergeMarks(state, [source, returned]) }],
+            null,
+            location,
+            state
+          );
+          return mergeMarks(state, [previous, propagated]);
+        }
+        return mergeMarks(state, [
+          previous,
+          converted(
+            state,
+            returned,
+            value,
+            'json.stringify.callback.result',
+            location
+          ),
+        ]);
+      },
+    };
+  };
+}
+
+function stringifyAfter(value, args, _receiver, location, state) {
+  return converted(
+    state,
+    jsonMarks(args[0], state),
+    value,
+    'json.stringify',
+    location
+  );
+}
+
+function parseAfter(value, args, _receiver, location, state) {
+  const source = marks(args[0]);
+  if (!source.length) return [];
+  let remaining = 512;
+  const seen = new Set();
+  const visit = object => {
+    if (!object || typeof object !== 'object' || seen.has(object)) return;
+    if (--remaining < 0 || types.isProxy(object)) {
+      state.gap('json_object_boundary');
+      return;
+    }
+    seen.add(object);
+    for (const key of Object.keys(object).slice(0, 128)) {
+      const descriptor = Object.getOwnPropertyDescriptor(object, key);
+      if (!descriptor || !('value' in descriptor)) continue;
+      state.putField(
+        object,
+        key,
+        converted(state, source, descriptor.value, 'json.parse', location)
+      );
+      visit(descriptor.value);
+    }
+  };
+  visit(value);
+  return converted(state, source, value, 'json.parse', location);
 }
 
 function registerConversionAndBufferBuiltins() {

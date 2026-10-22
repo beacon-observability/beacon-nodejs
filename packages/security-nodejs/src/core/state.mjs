@@ -44,6 +44,8 @@ export class SecurityState {
     this.sourceKeys = new Map();
     this.nodes = new Map();
     this.objects = new WeakMap();
+    this.sharedRecords = new WeakSet();
+    this.captureCache = new Map();
     this.objectCount = 0;
     this.bytes = 0;
     this.seen = new Map();
@@ -113,10 +115,26 @@ export class SecurityState {
     }
     return valid;
   }
-  record(value, create = false) {
+  record(value, create = false, writable = false) {
     if (!object(value) || this.closed || !this.collection_enabled)
       return undefined;
     let entry = this.objects.get(value);
+    if (entry && writable && this.sharedRecords.has(entry)) {
+      if (
+        this.objectCount >= this.maxObjects ||
+        !this.reserve(128 + entry.fields.size * 64)
+      ) {
+        this.exhaust('object_count_limit');
+        return undefined;
+      }
+      entry = {
+        marks: entry.marks,
+        fields: new Map(entry.fields),
+        data: entry.data,
+      };
+      this.objects.set(value, entry);
+      this.objectCount++;
+    }
     if (!entry && create) {
       if (this.objectCount >= this.maxObjects || !this.reserve(128)) {
         this.exhaust('object_count_limit');
@@ -128,18 +146,25 @@ export class SecurityState {
     }
     return entry;
   }
+  aliasRecord(value, entry) {
+    if (!entry || !object(value) || this.closed || !this.collection_enabled)
+      return;
+    if (!this.objects.has(value) && !this.reserve(32)) return;
+    this.sharedRecords.add(entry);
+    this.objects.set(value, entry);
+  }
   marks(value) {
     return this.valid(this.record(value)?.marks);
   }
   put(value, marks) {
-    const entry = this.record(value, true);
+    const entry = this.record(value, true, true);
     if (entry) entry.marks = this.valid(marks);
   }
   field(value, key) {
     return this.valid(this.record(value)?.fields.get(key));
   }
   putField(value, key, marks) {
-    const entry = this.record(value, Boolean(marks?.length));
+    const entry = this.record(value, Boolean(marks?.length), true);
     if (!entry) return;
     if (!entry.fields.has(key) && marks?.length && !this.reserve(64)) return;
     marks = this.valid(marks);
@@ -425,6 +450,8 @@ export class SecurityState {
     processBytes = Math.max(0, processBytes - this.bytes);
     this.bytes = 0;
     this.objects = new WeakMap();
+    this.sharedRecords = new WeakSet();
+    this.captureCache.clear();
     this.nodes.clear();
     this.sources.clear();
     this.sourceKeys.clear();

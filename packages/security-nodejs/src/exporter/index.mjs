@@ -118,6 +118,12 @@ export class Exporter {
       'beacon.security.export.security.bytes-per-second',
       524288
     );
+    const reserved = Number(
+      text('beacon.security.export.priority.reserved-percent', '10')
+    );
+    this.reservedPercent = Number.isFinite(reserved)
+      ? Math.max(0, Math.min(50, reserved))
+      : 10;
     this.sbomEventsPerSecond = limit(
       'beacon.security.export.sbom.events-per-second',
       200
@@ -203,14 +209,32 @@ export class Exporter {
     const maximum =
       channel === 'security' ? this.securityQueueSize : this.sbomQueueSize;
     if (queue.length >= maximum) {
-      this._loss(`${channel}.queue_full`, value);
-      return false;
+      const victim =
+        channel === 'security'
+          ? queue.findIndex(
+              entry => this._priority(entry.event) < this._priority(value)
+            )
+          : -1;
+      if (victim < 0) {
+        this._loss(`${channel}.queue_full`, value);
+        return false;
+      }
+      this._loss(`${channel}.queue_full`, queue.splice(victim, 1)[0].event);
+      this._count('security.priority_evictions');
     }
-    queue.push({
+    const entry = {
       event: value,
       contextEvent: value,
       evidence: Boolean(evidence),
-    });
+    };
+    const index =
+      channel === 'security'
+        ? queue.findIndex(
+            item => this._priority(item.event) < this._priority(value)
+          )
+        : -1;
+    if (index < 0) queue.push(entry);
+    else queue.splice(index, 0, entry);
     this._count(`${channel}.queued`);
     void this._drain(channel);
     return true;
@@ -513,9 +537,16 @@ export class Exporter {
       state.bytes = 0;
     }
     const diagnostic = this._isLossDiagnostic(event);
+    const ordinary = channel === 'security' && this._priority(event) < 2;
+    const eventCapacity = ordinary
+      ? eventsLimit - Math.floor((eventsLimit * this.reservedPercent) / 100)
+      : eventsLimit;
+    const byteCapacity = ordinary
+      ? bytesLimit - Math.floor((bytesLimit * this.reservedPercent) / 100)
+      : bytesLimit;
     if (
       !diagnostic &&
-      (state.events >= eventsLimit || state.bytes + bytes > bytesLimit)
+      (state.events >= eventCapacity || state.bytes + bytes > byteCapacity)
     ) {
       if (channel === 'sbom' && bytes <= bytesLimit)
         this._count('sbom.budget_deferred');
@@ -657,6 +688,8 @@ export class Exporter {
     this.dropped += pending.length;
     this.droppedByChannel[channel] += pending.length;
     this.pendingDropped[channel] += pending.length;
+    for (const entry of pending)
+      this._count(`${channel}.dropped.${this._lossClass(entry.event)}`);
     if (channel === 'security') {
       this.ledger.count('delivery_loss', pending.length);
       for (const entry of pending)
@@ -670,6 +703,7 @@ export class Exporter {
     this.droppedByChannel[channel] += 1;
     this.pendingDropped[channel] += 1;
     this._count(reason);
+    this._count(`${channel}.dropped.${this._lossClass(event)}`);
     if (channel === 'security') {
       this.ledger.count('delivery_loss');
       this.ledger.recordDeliveryLoss(event, 1);
@@ -736,6 +770,20 @@ export class Exporter {
       name === 'beacon.security.export.dropped' ||
       name === 'beacon.security.sbom.export.dropped'
     );
+  }
+
+  _priority(event) {
+    if (this._isLossDiagnostic(event)) return 3;
+    if (event?.attack_evidence?.status === 'suspected') return 2;
+    return this._isDiagnostic(event) ? 1 : 0;
+  }
+
+  _lossClass(event) {
+    return event?.attack_evidence?.status === 'suspected'
+      ? 'suspected'
+      : this._isDiagnostic(event)
+        ? 'diagnostic'
+        : 'ordinary';
   }
 
   _ioRequest(operation, value, timeoutMillis = 0) {

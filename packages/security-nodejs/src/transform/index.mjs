@@ -311,6 +311,7 @@ function transformModule(source, filename, url, inputSourceMap, format) {
     const scope = scopes.get(node);
     const env = { scope, temps: [], frame: info.frame };
     const originalBody = node.body;
+    const nativeBody = nativeFunctionBody(node, scope);
     const body = t.isBlockStatement(originalBody)
       ? block(originalBody, env)
       : t.blockStatement([
@@ -423,8 +424,104 @@ function transformModule(source, filename, url, inputSourceMap, format) {
         )
       );
     body.body.unshift(helperDeclaration());
+    if (nativeBody)
+      body.body.splice(
+        1,
+        0,
+        t.ifStatement(
+          t.unaryExpression('!', call('hasRequestContext')),
+          nativeBody
+        )
+      );
     node.body = body;
     return node;
+  }
+  function nativeFunctionBody(node, scope) {
+    if (node.generator) return null;
+    const unsupported = new Error('instrumented_function_required');
+    let size = 0;
+    try {
+      t.traverseFast(node.body, child => {
+        // Keep escaping closures/classes and dynamic scope instrumented even
+        // when created outside a request. Writes into enclosing bindings also
+        // need their metadata invalidation, including later async re-entry.
+        if (
+          ++size > 2048 ||
+          t.isFunction(child) ||
+          t.isClass(child) ||
+          t.isYieldExpression(child) ||
+          t.isOptionalCallExpression(child) ||
+          t.isWithStatement(child) ||
+          t.isIdentifier(child, { name: 'eval' })
+        )
+          throw unsupported;
+        const assigned = t.isAssignmentExpression(child)
+          ? child.left
+          : t.isUpdateExpression(child)
+            ? child.argument
+            : null;
+        if (assigned)
+          for (const name of Object.keys(t.getBindingIdentifiers(assigned))) {
+            const binding = scope.getBinding(name);
+            if (!binding || binding.scope !== scope) throw unsupported;
+          }
+      });
+    } catch (error) {
+      if (error !== unsupported) throw error;
+      return null;
+    }
+    const body = t.isBlockStatement(node.body)
+      ? clone(node.body)
+      : t.blockStatement([t.returnStatement(clone(node.body))]);
+    const nativeTemps = [];
+    const rewrite = child => {
+      for (const key of t.VISITOR_KEYS[child.type] || []) {
+        if (Array.isArray(child[key]))
+          child[key] = child[key].map(value =>
+            value ? rewrite(value) : value
+          );
+        else if (child[key]) child[key] = rewrite(child[key]);
+      }
+      if (
+        (!t.isCallExpression(child) && !t.isNewExpression(child)) ||
+        t.isImport(child.callee) ||
+        t.isSuper(child.callee) ||
+        (t.isMemberExpression(child.callee) && t.isSuper(child.callee.object))
+      )
+        return child;
+      let callee = child.callee,
+        receiver = t.unaryExpression('void', t.numericLiteral(0));
+      if (t.isMemberExpression(callee)) {
+        const temporary = unique(scope, 'NativeReceiver');
+        nativeTemps.push(temporary);
+        callee = t.memberExpression(
+          t.assignmentExpression('=', clone(temporary), callee.object),
+          callee.property,
+          callee.computed
+        );
+        receiver = clone(temporary);
+      }
+      const result = call('nativeInvoke', [
+        callee,
+        receiver,
+        child.arguments.length
+          ? t.arrayExpression(child.arguments)
+          : member(clone(helper), 'nativeArguments'),
+        t.booleanLiteral(t.isNewExpression(child)),
+      ]);
+      result.loc = child.loc;
+      return result;
+    };
+    body.body = body.body.map(rewrite);
+    if (nativeTemps.length)
+      body.body.unshift(
+        t.variableDeclaration(
+          'let',
+          nativeTemps.map(id => t.variableDeclarator(clone(id)))
+        )
+      );
+    body.body.push(t.returnStatement());
+    return body;
   }
   function classNode(node) {
     const registrations = [];

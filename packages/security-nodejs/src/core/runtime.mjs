@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { errorMonitor } from 'node:events';
 import path from 'node:path';
 import {
   context,
@@ -69,11 +70,17 @@ export function current() {
     !instrumentationIsEnabled()
   )
     return undefined;
-  if (runtime && !runtime.exporter.ledger.enabled()) {
+  if (runtime && !runtime.exporter.ledger.enabled(false)) {
     state.gap('collection_paused_during_request');
     return undefined;
   }
   return state;
+}
+export function hasRequestContext() {
+  const state = local.getStore() || context.active().getValue(key);
+  // A paused/disabled request can resume, so it must retain the instrumented
+  // path. Closed request state cannot become live again.
+  return Boolean(state && !state.closed);
 }
 export function bind(state, fn) {
   return local.run(state, () =>
@@ -83,7 +90,9 @@ export function bind(state, fn) {
 export function begin(req, res, metadata = {}) {
   if (!collectionConfigured() || !runtime || stopped) return undefined;
   const existing = requests.get(req);
-  if (existing && !existing.closed) return existing;
+  if (existing) return existing.closed ? undefined : existing;
+  if (res.writableFinished || res.writableEnded || res.destroyed)
+    return undefined;
   const state = new SecurityState(runtime.identity, metadata);
   const rpc = getRPCMetadata(context.active());
   const span = rpc?.type === RPCType.HTTP ? rpc.span : undefined;
@@ -114,19 +123,25 @@ export function begin(req, res, metadata = {}) {
     } catch {
       state.gap('request_completion_metadata_failed');
     } finally {
+      res.removeListener('finish', finish);
+      res.removeListener('close', finish);
+      res.removeListener(errorMonitor, onError);
       end(state);
     }
   };
-  res.once('finish', finish);
-  res.once('close', finish);
-  res.once('error', error => {
+  const onError = error => {
     try {
       state.request.error_type = error?.constructor?.name || 'Error';
     } catch {
       state.request.error_type = 'Error';
     }
     finish();
-  });
+  };
+  res.once('finish', finish);
+  res.once('close', finish);
+  // errorMonitor observes failures without installing an error handler and
+  // changing whether the application considers the error unhandled.
+  res.once(errorMonitor, onError);
   return state;
 }
 export function summarize(state) {

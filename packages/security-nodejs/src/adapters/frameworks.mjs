@@ -3,6 +3,7 @@ import { isObject, sourceAccessor } from '../core/values.mjs';
 import { model } from '../core/calls.mjs';
 import { IncomingMessage } from 'node:http';
 import { types } from 'node:util';
+import { errorMonitor } from 'node:events';
 
 const PATCHED = Symbol.for('beacon.security.framework.handle.v1');
 const WRAPPED = Symbol.for('beacon.security.framework.factory.v1');
@@ -134,6 +135,33 @@ function captureAccessorValue(
     if (carrier?.sealed) return undefined;
   }
   if (dedupeObject && isObject(value)) {
+    if (accessorKey === 'query' && !carrierKey) {
+      const snapshot = querySnapshot(value);
+      if (snapshot?.objects.some(object => state.record(object)?.data)) {
+        return captureValue(state, value, type, name, location);
+      }
+      if (snapshot) {
+        const cached = state.captureCache.get(snapshot.key);
+        if (cached && !cached.some(record => record?.data)) {
+          snapshot.objects.forEach((object, index) =>
+            state.aliasRecord(object, cached[index])
+          );
+          return [];
+        }
+        if (cached) state.captureCache.delete(snapshot.key);
+        const result = captureValue(state, value, type, name, location);
+        if (
+          state.captureCache.size < 8 &&
+          state.reserve(snapshot.key.length * 2 + 64)
+        ) {
+          const records = snapshot.objects.map(object => state.record(object));
+          for (const record of records)
+            if (record) state.sharedRecords.add(record);
+          state.captureCache.set(snapshot.key, records);
+        }
+        return result;
+      }
+    }
     let keys = capturedObjects.get(state);
     if (!keys) {
       keys = new Map();
@@ -148,6 +176,59 @@ function captureAccessorValue(
     seen.add(value);
   }
   return captureValue(state, value, type, name, location);
+}
+
+function querySnapshot(value) {
+  const objects = [],
+    parts = [],
+    seen = new Set();
+  let bytes = 0;
+  const boundary = new Error('query_snapshot_boundary');
+  const add = text => {
+    bytes += text.length;
+    if (bytes > 4096) throw boundary;
+    parts.push(text.length + ':' + text);
+  };
+  const visit = (value, depth) => {
+    if (value === null || typeof value !== 'object') {
+      if (
+        !['string', 'number', 'boolean', 'undefined'].includes(typeof value) &&
+        value !== null
+      )
+        throw boundary;
+      add(typeof value + ':' + String(value));
+      return;
+    }
+    if (
+      depth >= 6 ||
+      objects.length >= 128 ||
+      types.isProxy(value) ||
+      types.isArgumentsObject(value) ||
+      seen.has(value)
+    )
+      throw boundary;
+    const proto = Object.getPrototypeOf(value);
+    if (!Array.isArray(value) && proto !== null && proto !== Object.prototype)
+      throw boundary;
+    seen.add(value);
+    objects.push(value);
+    add(Array.isArray(value) ? 'array' : 'object');
+    let keys = 0;
+    for (const key of Object.keys(value)) {
+      if (++keys > 128) throw boundary;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor)) throw boundary;
+      add(key);
+      visit(descriptor.value, depth + 1);
+    }
+    add('end');
+  };
+  try {
+    visit(value, 0);
+    return { key: parts.join('|'), objects };
+  } catch {
+    return null;
+  }
 }
 
 function registerAccessor(
@@ -761,7 +842,7 @@ function releaseOnResponse(response, state) {
   try {
     response.once('finish', release);
     response.once('close', release);
-    response.once('error', release);
+    response.once(errorMonitor, release);
   } catch {
     state.gap('fastify_validation_cleanup_registration_failed');
   }
@@ -908,15 +989,19 @@ function installFastifyHooks(app) {
         done
       );
     });
-    app.addHook('onRequestAbort', function onRequestAbort(request) {
-      return bindHook(request, state => {
-        if (!state) return;
-        try {
-          state.gap('request_aborted');
-        } finally {
-          releaseValidationCarriers(state);
-        }
-      });
+    app.addHook('onRequestAbort', function onRequestAbort(request, done) {
+      return bindHook(
+        request,
+        state => {
+          if (!state) return;
+          try {
+            state.gap('request_aborted');
+          } finally {
+            releaseValidationCarriers(state);
+          }
+        },
+        done
+      );
     });
     Object.defineProperty(app, PATCHED, { value: true, configurable: true });
     return true;

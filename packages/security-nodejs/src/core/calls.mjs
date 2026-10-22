@@ -1,6 +1,7 @@
 import { current } from './runtime.mjs';
 import { p, isObject, binding } from './values.mjs';
 import { types, promisify } from 'node:util';
+import { preserveErrorStack } from './stacks.mjs';
 
 const functions = new WeakMap(),
   models = new WeakMap(),
@@ -8,6 +9,34 @@ const functions = new WeakMap(),
   namespaces = new WeakMap(),
   boundFunctions = new WeakMap();
 const frames = [];
+export const nativeArguments = Object.freeze([]);
+let nativeDepth = 0;
+
+/** Unboxed calls still observe factories whose results can escape into a request. */
+export function nativeInvoke(target, receiver, args, construct = false) {
+  nativeDepth++;
+  try {
+    const actual = unwrap(target);
+    const value = construct
+      ? Reflect.construct(target, args)
+      : Reflect.apply(target, receiver, args);
+    if (actual === Function.prototype.bind || actual === promisify)
+      derivedFunction(
+        actual,
+        args.map(value => p(value)),
+        p(receiver),
+        value
+      );
+    if (isObject(value))
+      preserveErrorStack(value, nativeInvoke, frames.length + nativeDepth);
+    return value;
+  } catch (error) {
+    preserveErrorStack(error, nativeInvoke, frames.length + nativeDepth);
+    throw error;
+  } finally {
+    nativeDepth--;
+  }
+}
 const modules = new Map(),
   resolutions = new Map(),
   exportedFunctions = new Map(),
@@ -114,6 +143,9 @@ export function property(receiver, key, operation, kind, location, arg) {
   frames.push(frame);
   try {
     value = operation();
+  } catch (error) {
+    preserveErrorStack(error, property, frames.length);
+    throw error;
   } finally {
     frames.pop();
     frame.fn = undefined;
@@ -287,16 +319,23 @@ export function invoke(callee, args, location = '', construct = false) {
   const actual = unwrap(target),
     state = current();
   if (!state) {
-    const value = construct
-      ? Reflect.construct(
-          target,
-          args.map(a => a.v)
-        )
-      : Reflect.apply(
-          target,
-          receiver.v,
-          args.map(a => a.v)
-        );
+    let value;
+    try {
+      value = construct
+        ? Reflect.construct(
+            target,
+            args.map(a => a.v)
+          )
+        : Reflect.apply(
+            target,
+            receiver.v,
+            args.map(a => a.v)
+          );
+      if (isObject(value)) preserveErrorStack(value, invoke, frames.length);
+    } catch (error) {
+      preserveErrorStack(error, invoke, frames.length);
+      throw error;
+    }
     derivedFunction(actual, args, receiver, value);
     return p(value);
   }
@@ -520,12 +559,34 @@ export function invoke(callee, args, location = '', construct = false) {
       state.gap('sink_model_failed');
     }
   }
+  let prepared;
+  let appliedTarget = target,
+    appliedReceiver = receiver.v;
+  if (handler?.prepare) {
+    try {
+      prepared = handler.prepare(frameArgs, modelReceiver, location, state);
+      if (prepared?.args && !construct) {
+        // prepare receives the effective arguments/receiver, including native
+        // call/apply/bind adaptation. Invoke that same effective function so a
+        // callback replacement does not corrupt those calling conventions.
+        actualArgs = prepared.args;
+        appliedTarget = targetForFrame;
+        appliedReceiver = modelReceiver.v;
+      }
+    } catch {
+      state.gap('call_preparation_model_failed');
+    }
+  }
   let value;
   frames.push(frame);
   try {
     value = construct
       ? Reflect.construct(target, actualArgs)
-      : Reflect.apply(target, receiver.v, actualArgs);
+      : Reflect.apply(appliedTarget, appliedReceiver, actualArgs);
+    if (isObject(value)) preserveErrorStack(value, invoke, frames.length);
+  } catch (error) {
+    preserveErrorStack(error, invoke, frames.length);
+    throw error;
   } finally {
     // A cached settled Promise may outlive the request; its metadata must not
     // retain the invoked function's closure or the original business arguments.
@@ -540,6 +601,13 @@ export function invoke(callee, args, location = '', construct = false) {
       marks =
         handler.after(value, frameArgs, modelReceiver, location, state) ||
         marks;
+    } catch {
+      state.gap('propagation_model_failed');
+    }
+  }
+  if (prepared?.after) {
+    try {
+      marks = prepared.after(value, marks) || marks;
     } catch {
       state.gap('propagation_model_failed');
     }

@@ -1,4 +1,5 @@
 import { current } from './runtime.mjs';
+export { hasRequestContext } from './runtime.mjs';
 import { property, namespaceMarks } from './calls.mjs';
 import rawProperty from './property.cjs';
 import { types } from 'node:util';

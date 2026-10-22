@@ -183,7 +183,9 @@ async function oneMode(mode) {
     ...(mode.security ? { BEACON_SECURITY_LOCAL_OUTPUT_ENABLED: 'true' } : {}),
     BEACON_SECURITY_QA_FRAMEWORK: framework,
     BEACON_SECURITY_QA_MODULE_SYSTEM: moduleSystem,
-    BEACON_SECURITY_OUTPUT: `/tmp/beacon_security-nodejs-perf/${mode.name}`,
+    // Trial-local output prevents another mode/run's durable SBOM history from
+    // changing startup work and RSS in a supposedly fresh comparison.
+    BEACON_SECURITY_OUTPUT: resolve(resultsDir, 'output', mode.name),
     NODE_OPTIONS: '',
   };
   const args = [];
