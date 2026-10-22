@@ -7,15 +7,14 @@ cross-language documentation entry point is
 
 ## Status
 
-Release candidate `1.3.1` adds preload/profiler lifecycle fixes and bounded workspace SBOM improvements.
-
-The current public stable release is Beacon Node.js `1.3.0`; `1.3.1` is the
-release candidate undergoing validation. It provides the
+The current public stable release is Beacon Node.js `1.3.1`, with
+preload/profiler lifecycle fixes and bounded workspace SBOM improvements.
+It provides the
 `@beacon-observability/nodejs` zero-code package and the matching
 `@beacon-observability/profiler-nodejs` and
 `@beacon-observability/security-nodejs` components. The public npm artifacts
 and GitHub Release passed the acceptance recorded in
-[the 1.3.0 validation record](validation/1.3.0.md). The repository is based on
+[the 1.3.1 validation record](validation/1.3.1.md). The repository is based on
 the official upstream `main` commit recorded when the project was established.
 That exact commit, rather than the moving branch name, is the reproducible
 baseline.
@@ -48,6 +47,7 @@ inherited upstream packages retain their own publication lifecycle.
 - [Verified Beacon-specific contributors](CONTRIBUTORS.md)
 - [Product version](version.properties)
 - [Release prerequisites](RELEASING.md)
+- [Beacon Node.js 1.3.1 release acceptance](validation/1.3.1.md)
 - [Beacon Node.js 1.3.0 release acceptance](validation/1.3.0.md)
 - [Beacon Node.js package documentation](../packages/nodejs/README.md)
 - [Profiler package documentation](../packages/profiler-nodejs/README.md)
