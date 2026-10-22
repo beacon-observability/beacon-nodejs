@@ -3,6 +3,14 @@
 
 ## Unreleased
 
+## 1.3.1 - 2026-10-22
+
+- Load the native backend on demand and isolate optional initialization failure.
+- Use unreferenced background wall timers, cancel unfinished samples on shutdown,
+  and reject overflowing intervals while retaining explicit collection behavior.
+- Honor decoded standard OTel service identity with explicit option precedence.
+- Update the emitted profiler_version tag to 1.3.1.
+
 ## 1.3.0 - 2026-10-20
 
 - Release the matching profiling component for Beacon Node.js 1.3.0 and update
