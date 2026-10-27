@@ -7,6 +7,8 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+- Isolate Beacon package tests from upstream-only Mocha hooks while retaining the supported runtime matrix.
+
 - Build inherited packages with Node.js 24 and reinstall native dependencies before testing each supported runtime.
 
 - Keep Beacon package compilation compatible with the renamed upstream TypeScript configuration.
