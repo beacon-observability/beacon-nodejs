@@ -30,7 +30,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '24'
       - name: Validate Beacon metadata and provenance
         run: node beacon/scripts/check-project.mjs
       - name: Install pinned dependencies
@@ -42,6 +42,13 @@ jobs:
           npm run compile --workspace=@opentelemetry/instrumentation-express
           npm run compile --workspace=@beacon-observability/profiler-nodejs
           npm run compile --workspace=@beacon-observability/nodejs
+      - name: Select Beacon test runtime
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install dependencies for the test runtime
+        if: matrix.node-version != '24'
+        run: npm ci
       - name: Test Beacon packages
         run: |
           npm test --workspace=@beacon-observability/profiler-nodejs

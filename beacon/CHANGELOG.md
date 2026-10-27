@@ -7,6 +7,8 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+- Build inherited packages with Node.js 24 and reinstall native dependencies before testing each supported runtime.
+
 - Keep Beacon package compilation compatible with the renamed upstream TypeScript configuration.
 
 - Adopted the verified OpenTelemetry source snapshot `0eb3a80a8ca977fe56b1`; Beacon product version remains unchanged.

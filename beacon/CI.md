@@ -18,6 +18,10 @@ the complete upstream instrumentation, browser, service-integration, or
 all-versions matrices and does not establish production support for every
 runtime in the matrix.
 
+Upstream build tools run on Node.js 24. Each matrix job then selects its declared
+Node.js runtime before running Beacon tests. Jobs switching runtime reinstall the
+locked dependencies with `npm ci` so native modules use the test runtime ABI.
+
 ## Inherited Workflow Isolation
 
 All inherited OpenTelemetry workflows are disabled in the Beacon GitHub
