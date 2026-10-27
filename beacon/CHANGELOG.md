@@ -7,6 +7,10 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+- Keep Beacon package compilation compatible with the renamed upstream TypeScript configuration.
+
+- Adopted the verified OpenTelemetry source snapshot `0eb3a80a8ca977fe56b1`; Beacon product version remains unchanged.
+
 ## 1.3.1 - 2026-10-22
 
 - Coordinate Security, profiler and SDK shutdown before restoring sole-owner

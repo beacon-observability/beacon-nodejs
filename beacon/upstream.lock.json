@@ -8,7 +8,7 @@
   "upstream": {
     "repository": "https://github.com/open-telemetry/opentelemetry-js-contrib.git",
     "branch": "main",
-    "commit": "31b2af9dd5fcc5f96949e5666f8f45b30b997722",
-    "capturedAt": "2026-09-28"
+    "commit": "207b9dd1c7e30c12d5dec0e54e476e361b209484",
+    "capturedAt": "2026-10-20"
   }
 }
