@@ -15,6 +15,7 @@ Use the bundled runtime, or copy the bundle into a compatible Node.js 24 Debian 
 application image of the same architecture. Profiling includes native prebuilds: compatibility
 with Alpine/musl, other Node.js major versions, other libc versions or architectures is not implied.
 The npm package's wider runtime matrix is separate from this image's acceptance scope.
+The bundle volume must allow native library mapping (no `noexec`); a read-only mount is supported.
 
 The image runs as `65532:65532`. `/opt/beacon-nodejs` contains the public packages, license files,
 `package-lock.json`, original npm tarballs, release manifest and distribution provenance under
