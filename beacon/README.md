@@ -47,6 +47,7 @@ inherited upstream packages retain their own publication lifecycle.
 - [Verified Beacon-specific contributors](CONTRIBUTORS.md)
 - [Product version](version.properties)
 - [Release prerequisites](RELEASING.md)
+- [Container distribution and Kubernetes injection](docker/nodejs/README.md)
 - [Beacon Node.js 1.3.1 release acceptance](validation/1.3.1.md)
 - [Beacon Node.js 1.3.0 release acceptance](validation/1.3.0.md)
 - [Beacon Node.js package documentation](../packages/nodejs/README.md)
