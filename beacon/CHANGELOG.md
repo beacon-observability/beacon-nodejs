@@ -7,6 +7,10 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+- Add a separate, manually approved GHCR distribution workflow for the published
+  Node.js packages, locked production dependencies, and a pinned Node.js 24 glibc
+  runtime. Test native amd64/arm64 images and isolated Kubernetes injection.
+
 ## 1.3.1 - 2026-10-22
 
 - Coordinate Security, profiler and SDK shutdown before restoring sole-owner

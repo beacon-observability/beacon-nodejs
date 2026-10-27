@@ -25,6 +25,11 @@ repository. Only the Beacon workflow may be enabled after review. Upstream
 release, dependency-update, scheduled, issue-management, and organization-
 specific workflows are not Beacon publication or maintenance entry points.
 
+The separately reviewed [Beacon Node.js image workflow](../.github/workflows/beacon-image.yml)
+is also a Beacon-owned entry point. It tests distribution changes on native
+amd64/arm64 PR runners and publishes only when manually dispatched from `main`,
+after `beacon-release` approval. See the [container guide](docker/nodejs/README.md).
+
 After every upstream synchronization, review newly added or renamed workflow
 files before enabling any Actions event. Repository conditions and missing
 secrets are not substitutes for disabling an unadapted publication workflow.
