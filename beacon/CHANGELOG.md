@@ -11,6 +11,14 @@ the exact adopted OpenTelemetry commit is recorded in
   Node.js packages, locked production dependencies, and a pinned Node.js 24 glibc
   runtime. Test native amd64/arm64 images and isolated Kubernetes injection.
 
+## 2.0.0 - 2026-10-30
+
+- Converge opt-in Node.js Security telemetry on the shared schema v2 contract:
+  per-request compact findings and periodic dependency inventories, with only
+  those two event families exported. Keep fingerprint v1 and bounded delivery.
+- Make the successful inventory interval 300 seconds by default, omit failed
+  replacement events, and remove online SBOM revisions and local history.
+
 ## 1.3.1 - 2026-10-22
 
 - Coordinate Security, profiler and SDK shutdown before restoring sole-owner

@@ -1,4 +1,4 @@
-import { eventRecord, PRODUCT } from '../schema.mjs';
+import { eventRecord, onlineEvent, PRODUCT } from '../schema.mjs';
 import { Worker } from 'node:worker_threads';
 import { join } from 'node:path';
 
@@ -129,7 +129,6 @@ export class Exporter {
     this.counters = Object.create(null);
     this.dropped = 0;
     this.droppedByChannel = { security: 0, sbom: 0 };
-    this.pendingDropped = { security: 0, sbom: 0 };
     this.draining = { security: false, sbom: false };
     this.sbomResumeTimer = null;
     this.budget = {
@@ -139,7 +138,6 @@ export class Exporter {
     this.lastFileWrite = 0;
     this.lastOtelCall = 0;
     this.lastError = 0;
-    this.snapshotFailureLastEmitted = 0;
     this.accepting = true;
     this.closed = false;
     this.ticking = false;
@@ -177,11 +175,13 @@ export class Exporter {
       this._onIoFailure(error);
       return null;
     });
-    this.monitor = setInterval(() => {
-      void this._tick(false);
-    }, 1000);
-    this.monitor.unref?.();
-    void this._tick(true);
+    if (this.localOutputEnabled || text('beacon.security.control.file', '')) {
+      this.monitor = setInterval(() => {
+        void this._tick(false);
+      }, 1000);
+      this.monitor.unref?.();
+      void this._tick(true);
+    }
   }
 
   emit(event, { evidence = false } = {}) {
@@ -189,9 +189,11 @@ export class Exporter {
       this._loss('beacon.security.invalid_event');
       return false;
     }
-    const value = eventRecord(copy(event), this.identity);
+    const contextEvent = eventRecord(copy(event), this.identity);
+    const value = onlineEvent(contextEvent);
+    if (!value) return false;
     const channel =
-      value.event_name === 'beacon.security.sbom.snapshot' ||
+      value.event_name === 'beacon.security.sbom.inventory' ||
       asText(value.event_name).startsWith('beacon.security.sbom.')
         ? 'sbom'
         : 'security';
@@ -208,7 +210,7 @@ export class Exporter {
     }
     queue.push({
       event: value,
-      contextEvent: value,
+      contextEvent,
       evidence: Boolean(evidence),
     });
     this._count(`${channel}.queued`);
@@ -242,7 +244,7 @@ export class Exporter {
   }
 
   async _close(timeoutMillis) {
-    clearInterval(this.monitor);
+    if (this.monitor) clearInterval(this.monitor);
     const deadline = Date.now() + timeoutMillis;
     const remaining = () => Math.max(0, deadline - Date.now());
     try {
@@ -287,7 +289,6 @@ export class Exporter {
     }
     this.ticking = true;
     this.lastTickPromise = (async () => {
-      if (emitEvents) this._emitPendingLoss();
       let control = null;
       let controlAvailable = false;
       try {
@@ -306,8 +307,7 @@ export class Exporter {
         force,
         emitEvents,
       });
-      if (emitEvents)
-        for (const event of result.events) this.emit(event, { evidence: true });
+      // Remote summary and diagnostic events are intentionally absent.
       if (this.localOutputEnabled) {
         for (const key of ['findings', 'runs']) {
           if (
@@ -355,21 +355,7 @@ export class Exporter {
       return true;
     } catch (error) {
       this.ledger.recordSnapshotFailure();
-      const current = Date.now();
-      if (
-        current - this.snapshotFailureLastEmitted >= 30000 &&
-        this.accepting
-      ) {
-        this.snapshotFailureLastEmitted = current;
-        this.emit(
-          {
-            event_name: 'beacon.security.snapshot.failed',
-            error_type: errorText(error),
-            count: this.ledger.snapshotFailures,
-          },
-          { evidence: true }
-        );
-      }
+      this._diagnostic(error);
       return false;
     }
   }
@@ -451,16 +437,17 @@ export class Exporter {
         bytes: Buffer.from(encoded, 'utf8'),
         truncated: false,
       };
+    if (original.event_name !== 'beacon.security.finding') {
+      this._count('record_too_large');
+      throw new Error('record_limit');
+    }
     const reduced = { ...original };
     for (const field of ['propagation', 'ranges', 'sources', 'stack']) {
-      if (original.event_name === 'beacon.security.finding')
-        reduced[field] = [];
-      else delete reduced[field];
+      delete reduced[field];
     }
-    if (original.event_name === 'beacon.security.finding') {
-      reduced.evidence_sampled = false;
-      reduced.evidence_sample_reason = 'record_byte_limit';
-    }
+    reduced.evidence_sampled = false;
+    reduced.evidence_sample_reason = 'record_byte_limit';
+    reduced.collection_complete = false;
     reduced.truncated = true;
     reduced.truncation_reason = 'record_byte_limit';
     encoded = encode(reduced);
@@ -470,38 +457,8 @@ export class Exporter {
         bytes: Buffer.from(encoded, 'utf8'),
         truncated: true,
       };
-    const summary = {
-      schema_version: 1,
-      source: original.source,
-      event_name: 'beacon.security.export.truncated',
-      original_event: original.event_name,
-      evidence_id: original.evidence_id ?? null,
-      sbom_id: original.sbom_id ?? null,
-      truncated: true,
-    };
-    encoded = encode(summary);
-    if (Buffer.byteLength(encoded) <= this.maxBytes)
-      return {
-        event: summary,
-        bytes: Buffer.from(encoded, 'utf8'),
-        truncated: true,
-      };
-    const minimal = {
-      schema_version: 1,
-      source: original.source,
-      event_name: 'beacon.security.export.truncated',
-      truncated: true,
-    };
-    encoded = encode(minimal);
-    if (Buffer.byteLength(encoded) > this.maxBytes) {
-      this._count('record_too_small_for_envelope');
-      throw new Error('record_limit');
-    }
-    return {
-      event: minimal,
-      bytes: Buffer.from(encoded, 'utf8'),
-      truncated: true,
-    };
+    this._count('record_too_large');
+    throw new Error('record_limit');
   }
 
   _withinBudget(channel, bytes, eventsLimit, bytesLimit, event) {
@@ -512,20 +469,14 @@ export class Exporter {
       state.events = 0;
       state.bytes = 0;
     }
-    const diagnostic = this._isLossDiagnostic(event);
-    if (
-      !diagnostic &&
-      (state.events >= eventsLimit || state.bytes + bytes > bytesLimit)
-    ) {
+    if (state.events >= eventsLimit || state.bytes + bytes > bytesLimit) {
       if (channel === 'sbom' && bytes <= bytesLimit)
         this._count('sbom.budget_deferred');
       else this._loss(`${channel}.budget_exceeded`, event);
       return false;
     }
-    if (!diagnostic) {
-      state.events += 1;
-      state.bytes += bytes;
-    }
+    state.events += 1;
+    state.bytes += bytes;
     return true;
   }
 
@@ -540,12 +491,7 @@ export class Exporter {
       this._recordDeliveryFailure(event, error);
       this._diagnostic(error);
     }
-    if (
-      channel !== 'security' ||
-      !this.evidencePath ||
-      (!entry.evidence && !this._isDiagnostic(event))
-    )
-      return;
+    if (channel !== 'security' || !this.evidencePath || !entry.evidence) return;
     try {
       await this._ioRequest('append-evidence', {
         line: bytes.toString('utf8'),
@@ -630,33 +576,12 @@ export class Exporter {
     });
   }
 
-  _emitPendingLoss() {
-    for (const channel of ['security', 'sbom']) {
-      const amount = this.pendingDropped[channel];
-      this.pendingDropped[channel] = 0;
-      if (amount <= 0) continue;
-      this.emit(
-        {
-          event_name:
-            channel === 'security'
-              ? 'beacon.security.export.dropped'
-              : 'beacon.security.sbom.export.dropped',
-          observed_at: new Date().toISOString(),
-          count: amount,
-          delivery: this.delivery(),
-        },
-        { evidence: true }
-      );
-    }
-  }
-
   _discardPending(queue, channel) {
     if (!queue.length) return;
     const pending = queue.splice(0, queue.length);
     this._count(`${channel}.shutdown_pending`, pending.length);
     this.dropped += pending.length;
     this.droppedByChannel[channel] += pending.length;
-    this.pendingDropped[channel] += pending.length;
     if (channel === 'security') {
       this.ledger.count('delivery_loss', pending.length);
       for (const entry of pending)
@@ -668,7 +593,6 @@ export class Exporter {
     const channel = asText(reason).startsWith('sbom.') ? 'sbom' : 'security';
     this.dropped += 1;
     this.droppedByChannel[channel] += 1;
-    this.pendingDropped[channel] += 1;
     this._count(reason);
     if (channel === 'security') {
       this.ledger.count('delivery_loss');
@@ -679,7 +603,7 @@ export class Exporter {
   _recordDeliveryFailure(event, _error) {
     if (
       event &&
-      (event.event_name === 'beacon.security.sbom.snapshot' ||
+      (event.event_name === 'beacon.security.sbom.inventory' ||
         asText(event.event_name).startsWith('beacon.security.sbom.'))
     )
       return;
@@ -714,28 +638,6 @@ export class Exporter {
     } catch {
       // Diagnostics must not escape an application callback.
     }
-  }
-
-  _isDiagnostic(event) {
-    const name = asText(event?.event_name);
-    return (
-      new Set([
-        'beacon.security.collection.incomplete',
-        'beacon.security.finding.summary',
-        'beacon.security.snapshot.failed',
-        'beacon.security.export.dropped',
-        'beacon.security.sbom.export.dropped',
-        'beacon.security.export.truncated',
-      ]).has(name) || name.startsWith('beacon.security.instrumentation.')
-    );
-  }
-
-  _isLossDiagnostic(event) {
-    const name = asText(event?.event_name);
-    return (
-      name === 'beacon.security.export.dropped' ||
-      name === 'beacon.security.sbom.export.dropped'
-    );
   }
 
   _ioRequest(operation, value, timeoutMillis = 0) {

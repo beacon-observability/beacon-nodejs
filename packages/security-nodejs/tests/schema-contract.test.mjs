@@ -11,6 +11,7 @@ import {
   PRODUCT,
   SCHEMA_VERSION,
   eventRecord,
+  onlineEvent,
   findingFingerprint,
   sinkFields,
 } from '../src/schema.mjs';
@@ -24,7 +25,7 @@ const vectors = JSON.parse(
 );
 const schema = JSON.parse(
   await readFile(
-    resolve(fixtures, 'beacon-security-event-v1.schema.json'),
+    resolve(fixtures, 'beacon-security-event-v2.schema.json'),
     'utf8'
   )
 );
@@ -47,7 +48,7 @@ function assertSchema(value) {
 const identity = {
   application_id:
     'app-dc6b8b0dc435531262eedacdf8fe51bd619964caa0e12bb4c29477448fdda8ae',
-  instance_id: 'node-test-instance',
+  instance_id: '11111111-1111-4111-8111-111111111111',
   service: { 'service.name': 'orders' },
   code: { repository: '', commit: '', build_id: '', service_version: '' },
   runtime: {
@@ -61,8 +62,8 @@ const identity = {
   identity_status: 'configured',
 };
 
-test('pins Beacon Security schema and fingerprint version 1', () => {
-  assert.equal(SCHEMA_VERSION, 1);
+test('pins Beacon Security schema v2 and fingerprint v1', () => {
+  assert.equal(SCHEMA_VERSION, 2);
   assert.equal(FINGERPRINT_VERSION, 1);
   assert.equal(PRODUCT, 'io.beacon.security');
   assert.equal(vectors.fingerprint_version, 1);
@@ -105,67 +106,51 @@ test('normalizes sink aliases to canonical dimensions', () => {
   );
 });
 
-test('emits the Beacon v1 finding and SBOM envelopes', () => {
-  const finding = eventRecord(
-    {
-      event_name: 'beacon.security.finding',
-      evidence_id: 'ev-node-test',
-      finding_id: `finding-${'a'.repeat(64)}`,
-      fingerprint_version: 1,
-      rule: 'sql_injection',
-      assessment: 'candidate_risk',
-      validation: 'unvalidated',
-      severity: 'unassigned',
-      confidence: 'modeled_flow',
-      execution_observation: 'invocation_attempt',
-      precision: 'exact',
-      trace_id: '',
-      server_span_id: '',
-      current_span_id: '',
-      trace_flags: 0,
-      sources: [],
-      propagation: [],
-      ranges: [],
-      sink: sinkFields(
-        'sql_injection',
-        'sql_template',
-        'mysql2.Connection.query',
-        'file:///srv/orders.mjs:20:1'
-      ),
-      truncated: false,
-      coverage: 'modeled_calls_only',
-      coverage_gaps: [],
-      request: {},
-      component: {},
-      stack: [],
-    },
-    identity
+test('emits only the Beacon v2 finding and inventory envelopes', () => {
+  const finding = onlineEvent(
+    eventRecord(
+      {
+        event_name: 'beacon.security.finding',
+        occurrence_id: 'ev-node-test',
+        finding_id: `finding-${'a'.repeat(64)}`,
+        fingerprint_version: 1,
+        rule: 'sql_injection',
+        precision: 'exact',
+        attack_evidence: { status: 'unknown', reason: 'analysis_unavailable' },
+        request: { method: 'GET', route: '/orders', status_code: 200 },
+        sink: sinkFields(
+          'sql_injection',
+          'sql_template',
+          'mysql2.Connection.query',
+          'file:///srv/orders.mjs:20:1'
+        ),
+        component: { name: 'orders', version: '1.0.0' },
+        evidence_sampled: true,
+        collection_complete: true,
+      },
+      identity
+    )
   );
-  assert.equal(finding.schema_version, 1);
+  assert.equal(finding.schema_version, 2);
   assert.equal(finding.source, 'beacon_security');
   assert.equal(finding.event_name, 'beacon.security.finding');
-  assert.equal(finding.application_id, identity.application_id);
-  assert.equal(finding.runtime.language, 'javascript');
+  assert.equal(finding.instance_id, identity.instance_id);
+  assert.equal(Object.hasOwn(finding, 'application_id'), false);
   assertSchema(finding);
 
-  const snapshot = eventRecord(
-    {
-      event_name: 'beacon.security.sbom.snapshot',
-      sbom_id: 'urn:uuid:node-test',
-      revision: 1,
-      release_id: 'release-node-test',
-      status: 'current',
-      completeness: 'incomplete',
-      reasons: ['runtime_dependency_graph_incomplete'],
-      component_count: 0,
-      part_index: 0,
-      part_count: 1,
-      dependencies: [],
-    },
-    identity
+  const inventory = onlineEvent(
+    eventRecord(
+      {
+        event_name: 'beacon.security.sbom.inventory',
+        started_at: '2026-10-27T09:00:00.000Z',
+        uptime_ms: 1200000,
+        dependencies: [],
+      },
+      identity
+    )
   );
-  assert.equal(snapshot.schema_version, 1);
-  assert.equal(snapshot.source, 'beacon_security_sbom');
-  assert.equal(snapshot.event_name, 'beacon.security.sbom.snapshot');
-  assertSchema(snapshot);
+  assert.equal(inventory.schema_version, 2);
+  assert.equal(inventory.source, 'beacon_security_sbom');
+  assert.equal(inventory.event_name, 'beacon.security.sbom.inventory');
+  assertSchema(inventory);
 });

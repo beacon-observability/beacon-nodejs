@@ -3,6 +3,11 @@
 
 ## Unreleased
 
+## 2.0.0 - 2026-10-30
+
+- Release the matching profiling component and update the emitted
+  `profiler_version` resource tag to `2.0.0`. Profiling behavior is unchanged.
+
 ## 1.3.1 - 2026-10-22
 
 - Load the native backend on demand and isolate optional initialization failure.

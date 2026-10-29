@@ -2,7 +2,7 @@
 
 Beacon Security is the opt-in runtime security capability used by the complete
 Beacon Node.js package. It records bounded modeled data-flow observations and a
-runtime dependency snapshot. Findings are observations or candidate risks, not
+runtime dependency inventory. Findings are observations or candidate risks, not
 confirmed vulnerabilities.
 
 Applications normally install and preload `@beacon-observability/nodejs`
@@ -44,39 +44,50 @@ excluded roots are not transformed.
 
 Apache 2.0
 
-## Finding occurrences and evidence sampling
+## Security telemetry v2
 
-Security exports one `beacon.security.finding` per finding fingerprint per request.
-Requests share a stable `finding_id` but retain distinct `evidence_id` values
-(aliased as `occurrence_id`) and their own trace/span context. Same-request
-repeated detections count once. Requests without a trace are still exported;
-a trace ID does not guarantee that the backend retained that trace.
+Security exports only `beacon.security.finding` and
+`beacon.security.sbom.inventory` through OpenTelemetry Logs. The pinned shared
+contract is schema v2 and fingerprint v1. A finding is emitted for each matched
+request, deduplicated by fingerprint within that request. Its stable `finding_id`
+groups the issue; its `occurrence_id` identifies this request. Trace and span
+context belongs to this occurrence. Missing trace context does not suppress a
+finding, and a trace ID does not guarantee that a backend retained the trace.
 
-`BEACON_SECURITY_FINDINGS_SAMPLE_SECONDS` (default `300`) controls full-evidence
-sampling, independently of occurrence delivery and trace sampling. Lightweight
-occurrences retain identity, sink, request context, and correlation with
-`evidence_sampled=false`, `evidence_sample_reason=interval`, and empty `sources`,
-`propagation`, `ranges`, and `stack` arrays. They declare `truncated=true` and
-`truncation_reason=evidence_sampled_out`; empty arrays do not mean absence of taint.
+`BEACON_SECURITY_FINDINGS_SAMPLE_SECONDS` (default `300`) controls full evidence
+sampling independently of occurrence delivery and trace sampling. A sampled-out
+occurrence still carries its identity, rule, attack-evidence status, sink,
+request, and available correlation. It sets `evidence_sampled=false`, retains
+the omission reason, and omits empty evidence arrays. Sampling alone does not
+set `truncated=true`; that flag describes actual collection or byte truncation.
+The `collection_complete` boolean records known collection gaps. Stronger
+evidence may upgrade a request's retained occurrence without changing its ID.
 
-`occurrences_total` is a process-local per-finding request count. If the
-aggregation table is full, bounded occurrence delivery continues with
-`aggregation_status=capacity_exceeded` and no total; tracked findings use
-`aggregation_status=tracked`. A representative snapshot may describe an earlier
-request than `last_trace_id`. Queue, rate, and byte limits remain in effect,
-health counters expose loss, and tiny byte budgets can produce
-`beacon.security.export.truncated` envelopes. Occurrence logs can increase
-volume and do not provide durable delivery.
+The online finding excludes duplicate Resource maps, fixed placeholders,
+`evidence_id`, and process-local `occurrences_total`. A resolved `component`
+directly carries name, version, and an optional real artifact hash. Findings
+without a resolved component remain reportable. Consumers aggregate received
+occurrence IDs by finding ID; delivery is best effort and cannot reconstruct
+records lost to a full queue or byte budget.
+
+The inventory publishes loaded library dependencies after initial asynchronous
+collection and every `BEACON_SECURITY_SBOM_REFRESH_SECONDS` (default `300`),
+even when unchanged. Successful empty dependencies are valid. A failed
+collection sends no replacement, so consumers retain the last complete result.
+Large results use `part_index` and `part_count` only when fragmented; consumers
+replace a list only after all parts for an instance and `observed_at` arrive.
+Each inventory includes process `started_at` and collection-time `uptime_ms`.
+Local CycloneDX output is opt-in and retains only the current document, without
+an SBOM history file. The optional local findings and run snapshots retain
+debug aggregates; default production mode keeps bounded sampling state only.
 
 ## Request-specific attack evidence
 
-
-A finding's code-risk `assessment` and `validation=unvalidated` are independent
-of `attack_evidence`. Its status is `unknown` for unsupported or imprecise
+A finding's `attack_evidence` status is `unknown` for unsupported or imprecise
 analysis, `no_evidence` when supported analysis finds no exploitation evidence,
 or `suspected` when tainted input controls supported syntax. Reasons are bounded
-machine-readable values without captured request data. `outcome=not_assessed`
-remains explicit: an invocation, normal return, or HTTP status cannot establish
+machine-readable values without captured request data. An invocation, normal
+return, or HTTP status cannot establish
 successful exploitation. `no_evidence` is not a safety verdict.
 
 Set `BEACON_SECURITY_ANALYSIS_SQL_DIALECT=ansi` to enable the bounded ANSI lexical
@@ -99,6 +110,7 @@ Within a request, `suspected > unknown > no_evidence` selects the retained
 occurrence without changing its ID or counting it twice. Stronger evidence
 bypasses ordinary detail sampling. Each later request retains its own status;
 a weaker request cannot replace a stronger representative.
-`attack_evidence_counts` partitions process-local request occurrences by the
-three statuses, and `strongest_attack_evidence` describes the strongest retained
-status. These counters do not represent confirmed attacks or exploit successes.
+When local diagnostic output is enabled, `attack_evidence_counts` partitions
+process-local request occurrences by the three statuses, and
+`strongest_attack_evidence` describes the strongest retained status. These
+local counters do not represent confirmed attacks or exploit successes.

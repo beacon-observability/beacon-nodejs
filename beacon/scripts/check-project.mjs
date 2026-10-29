@@ -154,9 +154,9 @@ check(
   securityMigration.contract?.repository ===
     'https://github.com/beacon-observability/beacon-security-spec' &&
     /^[0-9a-f]{40}$/.test(securityMigration.contract?.commit ?? '') &&
-    securityMigration.contract?.schemaVersion === 1 &&
+    securityMigration.contract?.schemaVersion === 2 &&
     securityMigration.contract?.fingerprintVersion === 1,
-  'Beacon Security contract must be pinned to schema and fingerprint version 1'
+  'Beacon Security contract must be pinned to schema version 2 and fingerprint version 1'
 );
 
 const traceDemo = readJson('examples/trace-profile-demo/package.json');
