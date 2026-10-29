@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,8 @@ import {
   BatchLogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
+import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
 
 process.env.BEACON_SECURITY_ENABLED = 'true';
 process.env.BEACON_SECURITY_NODE_INCLUDE = process.cwd();
@@ -18,11 +20,28 @@ process.env.OTEL_LOGS_EXPORTER = 'none';
 const { RuntimeLedger } = await import('../src/exporter/ledger.mjs');
 const { Exporter } = await import('../src/exporter/index.mjs');
 const { SecurityState } = await import('../src/core/state.mjs');
+const { onlineEvent } = await import('../src/schema.mjs');
 const identity = {
   application_id: 'occurrence-app',
-  instance_id: 'occurrence-instance',
+  instance_id: '11111111-1111-4111-8111-111111111111',
   runtime: { language: 'javascript' },
 };
+const schema = JSON.parse(
+  await readFile(
+    new URL(
+      './fixtures/spec/beacon-security-event-v2.schema.json',
+      import.meta.url
+    ),
+    'utf8'
+  )
+);
+const ajv = new Ajv2020({
+  allErrors: true,
+  strict: true,
+  strictRequired: false,
+});
+addFormats(ajv);
+const validateEvent = ajv.compile(schema);
 
 function occurrence(ledger, index, location = 'query', fragment) {
   const state = new SecurityState(identity);
@@ -75,9 +94,10 @@ test('each request retains its occurrence and trace when detail sampling suppres
   const events = [1, 2, 0].map(index => occurrence(ledger, index));
   assert.equal(new Set(events.map(event => event.finding_id)).size, 1);
   assert.equal(new Set(events.map(event => event.occurrence_id)).size, 3);
-  assert.deepEqual(
-    events.map(event => event.occurrences_total),
-    [1, 2, 3]
+  assert.ok(
+    events.every(
+      event => !Object.hasOwn(onlineEvent(event), 'occurrences_total')
+    )
   );
   assert.deepEqual(
     events.map(event => event.evidence_sampled),
@@ -88,9 +108,8 @@ test('each request retains its occurrence and trace when detail sampling suppres
     ['1'.padStart(32, '0'), '2'.padStart(32, '0'), '']
   );
   for (const event of events.slice(1)) {
-    assert.equal(event.occurrence_id, event.evidence_id);
-    assert.equal(event.aggregation_status, 'tracked');
-    assert.equal(event.truncation_reason, 'evidence_sampled_out');
+    assert.ok(event.occurrence_id);
+    assert.equal(onlineEvent(event).truncated, undefined);
     for (const field of ['sources', 'propagation', 'ranges', 'stack'])
       assert.deepEqual(event[field], []);
   }
@@ -118,9 +137,10 @@ test('interleaved asynchronous requests retain independent IDs and context', asy
     })
   );
   assert.equal(new Set(events.map(event => event.occurrence_id)).size, 12);
-  assert.deepEqual(
-    events.map(event => event.occurrences_total),
-    Array.from({ length: 12 }, (_, i) => i + 1)
+  assert.ok(
+    events.every(
+      event => !Object.hasOwn(onlineEvent(event), 'occurrences_total')
+    )
   );
   assert.deepEqual(
     events.map(event => event.trace_id),
@@ -181,6 +201,12 @@ for (const fragments of [undefined, ['12', '1 OR 1=1', '14']]) {
           ),
         })
       );
+      for (const { event } of findings)
+        assert.equal(
+          validateEvent(event),
+          true,
+          ajv.errorsText(validateEvent.errors)
+        );
       assert.equal(
         new Set(findings.map(({ event }) => event.finding_id)).size,
         1
@@ -199,7 +225,7 @@ for (const fragments of [undefined, ['12', '1 OR 1=1', '14']]) {
           ['no_evidence', 'suspected', 'no_evidence']
         );
         for (const { event } of findings)
-          assert.equal(event.attack_evidence.outcome, 'not_assessed');
+          assert.equal(event.attack_evidence.outcome, undefined);
       }
       assert.deepEqual(
         findings.map(({ log }) => log.traceId.toLowerCase()),

@@ -118,6 +118,10 @@ export class RuntimeLedger {
     this.identity = copy(record(identity) ? identity : {});
     this.profile = text(profile);
     this.output = text(output);
+    this.localOutputEnabled = flag(
+      'beacon.security.local-output.enabled',
+      false
+    );
     this.findings = new Map();
     this.runs = new Map();
     this.runSnapshots = new WeakMap();
@@ -144,7 +148,6 @@ export class RuntimeLedger {
     this.controlError = '';
     this.controlErrorRevision = '';
     this.snapshotFailures = 0;
-    this.summaryAt = 0;
     this.snapshotAt = 0;
     this.lastSnapshotFailureLog = 0;
     this.requestSecond = 0;
@@ -187,8 +190,8 @@ export class RuntimeLedger {
     if (!record(event)) return;
     const { dependencies, part_index, part_count, ...summary } = event;
     this.sbomState = { ...this.sbomState, ...copy(summary) };
-    if (event.event_name === 'beacon.security.sbom.update_failed')
-      this.sbomState.status = 'degraded';
+    if (event.event_name === 'beacon.security.sbom.inventory')
+      this.sbomState.status = 'current';
   }
 
   begin(state) {
@@ -318,41 +321,45 @@ export class RuntimeLedger {
           event.aggregation_status = 'capacity_exceeded';
           event.evidence_sample_reason = 'finding_capacity';
           this._omitEvidence(event);
-          delete event.occurrences_total;
           result.push(event);
           continue;
         }
-        finding = {
-          finding_id: findingKey,
-          rule: event.rule,
-          assessment: event.assessment,
-          validation: 'unvalidated',
-          sink: copy(event.sink),
-          first_seen: event.observed_at,
-          attack_evidence_counts: { unknown: 0, no_evidence: 0, suspected: 0 },
-          occurrences: 0,
-          last_sample_millis: 0,
-        };
+        finding = this.localOutputEnabled
+          ? {
+              finding_id: findingKey,
+              rule: event.rule,
+              assessment: event.assessment,
+              validation: 'unvalidated',
+              sink: copy(event.sink),
+              first_seen: event.observed_at,
+              attack_evidence_counts: {
+                unknown: 0,
+                no_evidence: 0,
+                suspected: 0,
+              },
+              occurrences: 0,
+              last_sample_millis: 0,
+            }
+          : { finding_id: findingKey, last_sample_millis: 0 };
         this.findings.set(findingKey, finding);
       }
-      increment(finding, 'occurrences');
-      const status = evidenceStatus(event);
-      finding.attack_evidence_counts = {
-        ...finding.attack_evidence_counts,
-        [status]: finding.attack_evidence_counts[status] + 1,
-      };
-      finding.last_seen = event.observed_at;
-      finding.last_trace_id = event.trace_id;
-      finding.last_evidence_id = event.evidence_id;
-      finding.last_run = copy(runState);
-      finding.code = copy(event.code);
-      finding.request = copy(event.request);
-      finding.component = copy(event.component);
-      finding.triage = this._triage(findingKey);
-      event.triage = copy(finding.triage);
-
-      event.occurrences_total = finding.occurrences;
-      event.aggregation_status = 'tracked';
+      if (this.localOutputEnabled) {
+        increment(finding, 'occurrences');
+        const status = evidenceStatus(event);
+        finding.attack_evidence_counts = {
+          ...finding.attack_evidence_counts,
+          [status]: finding.attack_evidence_counts[status] + 1,
+        };
+        finding.last_seen = event.observed_at;
+        finding.last_trace_id = event.trace_id;
+        finding.last_occurrence_id = event.occurrence_id;
+        finding.last_run = copy(runState);
+        finding.code = copy(event.code);
+        finding.request = copy(event.request);
+        finding.component = copy(event.component);
+        finding.triage = this._triage(findingKey);
+        event.triage = copy(finding.triage);
+      }
       event.evidence_sampled = sample;
       event.evidence_sample_reason = upgrade
         ? 'evidence_upgrade'
@@ -361,15 +368,17 @@ export class RuntimeLedger {
           : 'interval';
       if (upgrade) {
         finding.strongest_evidence_rank = rank;
-        finding.strongest_attack_evidence = copy(
-          event.attack_evidence || evidence('unknown', 'analysis_unavailable')
-        );
-        finding.assessment = event.assessment;
+        if (this.localOutputEnabled) {
+          finding.strongest_attack_evidence = copy(
+            event.attack_evidence || evidence('unknown', 'analysis_unavailable')
+          );
+          finding.assessment = event.assessment;
+        }
       }
       if (sample) {
         finding.last_sample_millis = sampleTime;
         finding.sample_run_id = runId;
-        if (rank >= strongest) {
+        if (this.localOutputEnabled && rank >= strongest) {
           const representative = copy(event);
           const previousBytes = number(finding.representative_bytes);
           let estimate = jsonBytes(representative);
@@ -398,8 +407,10 @@ export class RuntimeLedger {
         this._omitEvidence(event);
       }
       result.push(event);
-      finding.dirty = true;
-      this.findingsRevision++;
+      if (this.localOutputEnabled) {
+        finding.dirty = true;
+        this.findingsRevision++;
+      }
     }
 
     const runId = runState.run_id;
@@ -419,33 +430,6 @@ export class RuntimeLedger {
         collectionEnabled
       );
 
-    let diagnostic;
-    try {
-      diagnostic =
-        typeof state?.diagnostics === 'function' ? state.diagnostics() : null;
-    } catch {
-      diagnostic = null;
-      this.count('request_completion_errors');
-    }
-    if (incomplete && !record(diagnostic)) {
-      diagnostic = {
-        event_name: 'beacon.security.collection.incomplete',
-        truncated: true,
-        coverage_gaps: gaps,
-      };
-    }
-    if (record(diagnostic)) {
-      const event = this._enrichEvent(
-        diagnostic,
-        state,
-        request,
-        runState,
-        incomplete,
-        gaps
-      );
-      event.collection_status = text(state?.collection_status);
-      result.push(event);
-    }
     return result;
   }
 
@@ -453,8 +437,6 @@ export class RuntimeLedger {
     for (const field of ['sources', 'propagation', 'ranges', 'stack'])
       event[field] = [];
     event.evidence_sampled = false;
-    event.truncated = true;
-    event.truncation_reason = 'evidence_sampled_out';
   }
 
   _enrichEvent(
@@ -476,8 +458,6 @@ export class RuntimeLedger {
     event.request = copy(request);
     event.run = copy(run);
     event.trace_availability = 'not_guaranteed_by_trace_id';
-    if (event.evidence_id !== undefined && event.evidence_id !== null)
-      event.occurrence_id = event.evidence_id;
     if (event.trace_id === undefined || event.trace_id === null)
       event.trace_id = text(state?.trace_id);
     if (event.server_span_id === undefined || event.server_span_id === null)
@@ -485,7 +465,7 @@ export class RuntimeLedger {
     if (event.trace_flags === undefined || event.trace_flags === null)
       event.trace_flags = state?.trace_flags ?? 0;
     if (incomplete) {
-      event.truncated = true;
+      event.collection_complete = false;
       event.coverage_gaps = [...gaps];
     }
     return eventRecord(event, this.identity);
@@ -645,7 +625,6 @@ export class RuntimeLedger {
       }
     }
 
-    const summaries = [];
     for (const run of this.runs.values()) {
       if (run.status === 'active' && !validUntil(run.expires_at)) {
         run.status = 'draining';
@@ -654,32 +633,15 @@ export class RuntimeLedger {
       }
       this._finishIfIdle(run);
     }
-    const flushDue =
-      force ||
-      monotonic - this.summaryAt >=
-        limit('beacon.security.findings.flush.seconds', 30) * 1000;
     for (const finding of this.findings.values()) {
+      if (!this.localOutputEnabled) continue;
       const triage = this._triage(text(finding.finding_id));
       if (JSON.stringify(triage) !== JSON.stringify(finding.triage)) {
         finding.triage = triage;
         this.findingsRevision++;
       }
-      if (flushDue && finding.dirty) {
-        delete finding.dirty;
-        summaries.push({
-          event_name: 'beacon.security.finding.summary',
-          observed_at: now(),
-          identity: copy(this.identity),
-          finding_id: finding.finding_id,
-          attack_evidence_counts: copy(finding.attack_evidence_counts),
-          occurrences_total: finding.occurrences,
-          first_seen: finding.first_seen,
-          last_seen: finding.last_seen,
-          triage: copy(finding.triage),
-        });
-      }
+      delete finding.dirty;
     }
-    if (summaries.length) this.summaryAt = monotonic;
 
     const findingsChanged =
       this.findingsRevision !== this.writtenRevisions.findings;
@@ -715,11 +677,8 @@ export class RuntimeLedger {
       this.runSnapshots.set(run, value);
       return value;
     });
-    const events = emitEvents
-      ? summaries.map(event => eventRecord(event, this.identity))
-      : [];
     return {
-      events,
+      events: [],
       findings: findingsChanged ? this._envelope('findings', findings) : null,
       runs: runsChanged ? this._envelope('runs', runs) : null,
       revisions: { findings: this.findingsRevision, runs: this.runsRevision },
@@ -903,7 +862,7 @@ export class RuntimeLedger {
     for (const item of value) {
       if (!record(item) || !record(item.scope))
         throw new Error('invalid_exception');
-      if (!text(item.scope.application_id) || !text(item.scope.finding_id))
+      if (!text(item.scope.finding_id))
         throw new Error('exception_scope_required');
       if (!text(item.reason).trim())
         throw new Error('exception_reason_required');
@@ -923,8 +882,6 @@ export class RuntimeLedger {
     for (const item of this.policy.exceptions) {
       if (!record(item) || !record(item.scope)) continue;
       if (
-        text(item.scope.application_id) ===
-          text(this.identity.application_id) &&
         text(item.scope.finding_id) === findingId &&
         validUntil(item.expires_at)
       )

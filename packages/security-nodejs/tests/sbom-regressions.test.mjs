@@ -7,6 +7,8 @@ import { Worker } from 'node:worker_threads';
 import test from 'node:test';
 import { SbomInventory } from '../src/sbom/index.mjs';
 
+process.env.BEACON_SECURITY_SBOM_REFRESH_SECONDS = '1';
+
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(predicate, timeout = 10000) {
   const start = Date.now();
@@ -55,7 +57,7 @@ test('loaded package membership and attribution survive the default 4096 observa
         event.dependencies?.some(item => item.name === 'early')
       )
     );
-    const ref = inventory.resolve(early)['bom-ref'];
+    const component = inventory.resolve(early);
     for (let i = 0; i < 4096; i++)
       inventory.observe(`${pathToFileURL(appFile).href}?version=${i}`);
     await waitFor(
@@ -63,9 +65,9 @@ test('loaded package membership and attribution survive the default 4096 observa
         inventory.published.byUrl[`${pathToFileURL(appFile).href}?version=4095`]
     );
     assert.equal(inventory.published.byPath[early], undefined);
-    assert.equal(inventory.resolve(early)['bom-ref'], ref);
+    assert.deepEqual(inventory.resolve(early), component);
     const snapshot = events
-      .filter(event => event.event_name === 'beacon.security.sbom.snapshot')
+      .filter(event => event.event_name === 'beacon.security.sbom.inventory')
       .at(-1);
     assert.ok(snapshot.dependencies.some(item => item.name === 'early'));
     assert.ok(inventory.droppedObservations > 0);
@@ -129,6 +131,7 @@ test('service-only npm workspace selectors resolve hoisted scoped dependencies a
   worker.on('message', message => messages.push(message));
   try {
     worker.postMessage({ type: 'observe', value: pathToFileURL(loaded).href });
+    worker.postMessage({ type: 'refresh' });
     const published = await waitFor(() =>
       messages.find(message => message.type === 'published')
     );
@@ -137,11 +140,13 @@ test('service-only npm workspace selectors resolve hoisted scoped dependencies a
     assert.deepEqual(published.events[0].dependencies, [
       { name: '@example/early', version: '1.0.0' },
     ]);
+    const document = JSON.parse(await fs.readFile(output, 'utf8'));
     assert.equal(
-      published.events.at(-1).reasons.includes('package_json_unreadable'),
+      document.properties
+        .find(item => item.name === 'beacon:security:sbom:completeness-reasons')
+        ?.value.includes('package_json_unreadable'),
       false
     );
-    const document = JSON.parse(await fs.readFile(output, 'utf8'));
     const optional = document.components.find(
       component => component.name === 'optional-missing'
     );
@@ -152,7 +157,7 @@ test('service-only npm workspace selectors resolve hoisted scoped dependencies a
   }
 });
 
-test('unchanged periodic checks do not republish maps or emit health on every refresh', async () => {
+test('unchanged periodic checks republish inventory without health events', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'beacon-sbom-idle-'));
   await write(path.join(root, 'package.json'), {
     name: 'idle',
@@ -173,20 +178,22 @@ test('unchanged periodic checks do not republish maps or emit health on every re
   try {
     worker.postMessage({ type: 'refresh' });
     await waitFor(() => messages.some(message => message.type === 'published'));
-    await sleep(2200);
-    assert.equal(
-      messages.filter(message => message.type === 'published').length,
-      1
+    await sleep(1200);
+    assert.ok(
+      messages.filter(message => message.type === 'published').length >= 2
     );
     assert.equal(
       messages.filter(message => message.type === 'event').length,
       0
     );
-    worker.postMessage({ type: 'refresh' });
-    await waitFor(() => messages.some(message => message.type === 'event'));
-    assert.equal(
-      messages.at(-1).event.event_name,
-      'beacon.security.sbom.health'
+    assert.ok(
+      messages
+        .filter(message => message.type === 'published')
+        .every(message =>
+          message.events.every(
+            event => event.event_name === 'beacon.security.sbom.inventory'
+          )
+        )
     );
   } finally {
     await worker.terminate();

@@ -1,4 +1,4 @@
-import { eventRecord } from '../schema.mjs';
+import { eventRecord, onlineEvent } from '../schema.mjs';
 import { limit } from '../config.mjs';
 
 export function dependencySnapshot(event, records, identity) {
@@ -22,16 +22,17 @@ export function dependencySnapshot(event, records, identity) {
   const rows = [...unique]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([, row]) => row);
-  const envelope = eventRecord(
-    {
-      ...event,
-      event_name: 'beacon.security.sbom.snapshot',
-      component_count: rows.length,
-      part_index: 2147483647,
-      part_count: 2147483647,
-      dependencies: [],
-    },
-    identity
+  const envelope = onlineEvent(
+    eventRecord(
+      {
+        ...event,
+        event_name: 'beacon.security.sbom.inventory',
+        part_index: 2147483647,
+        part_count: 2147483647,
+        dependencies: [],
+      },
+      identity
+    )
   );
   const maximum = Math.min(
     limit('beacon.security.evidence.max.bytes', 65536),
@@ -55,10 +56,15 @@ export function dependencySnapshot(event, records, identity) {
     bytes += size + (chunk.length ? 1 : 0);
     chunk.push(row);
   }
-  return chunks.map((dependencies, part_index) => ({
-    ...envelope,
-    dependencies,
-    part_index,
-    part_count: chunks.length,
-  }));
+  return chunks.map((dependencies, part_index) => {
+    const result = { ...envelope, dependencies };
+    if (chunks.length > 1) {
+      result.part_index = part_index;
+      result.part_count = chunks.length;
+    } else {
+      delete result.part_index;
+      delete result.part_count;
+    }
+    return result;
+  });
 }

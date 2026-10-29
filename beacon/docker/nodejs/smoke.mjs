@@ -9,6 +9,10 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const bundle = process.argv[2] || '/opt/beacon-nodejs';
 const version = process.argv[3];
+const sbomEvent =
+  Number(version?.split('.')[0]) >= 2
+    ? 'beacon.security.sbom.inventory'
+    : 'beacon.security.sbom.snapshot';
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
 assert(version, 'Usage: node smoke.mjs <bundle-directory> <version>');
 assert.equal(process.getuid(), 65532);
@@ -155,9 +159,7 @@ try {
         `No native profile: ${output}`
       );
       assert(
-        logs.some(item =>
-          item.body.includes(Buffer.from('beacon.security.sbom.snapshot'))
-        ),
+        logs.some(item => item.body.includes(Buffer.from(sbomEvent))),
         `No Security SBOM: ${output}`
       );
     } else {

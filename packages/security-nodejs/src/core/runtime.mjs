@@ -94,9 +94,8 @@ export function begin(req, res, metadata = {}) {
   }
   state.onFinding = event => {
     const filename = event.sink.location.split('#')[0];
-    event.component = runtime.inventory?.resolve(
-      sourceFiles.get(filename) || filename
-    ) || { status: 'unresolved', reason: 'sbom_disabled' };
+    event.component =
+      runtime.inventory?.resolve(sourceFiles.get(filename) || filename) || null;
     summarize(state);
   };
   runtime.exporter.ledger.begin(state);
@@ -140,7 +139,7 @@ export function summarize(state) {
       'beacon.security.finding.ids': [
         ...new Set(state.pending.map(e => e.finding_id)),
       ],
-      'beacon.security.evidence.ids': state.pending.map(e => e.evidence_id),
+      'beacon.security.occurrence.ids': state.pending.map(e => e.occurrence_id),
     });
   }
   if (state.truncated) span.setAttribute('beacon.security.truncated', true);

@@ -1,4 +1,4 @@
-import { eventRecord, componentReference } from '../schema.mjs';
+import { eventRecord, onlineEvent, componentReference } from '../schema.mjs';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
@@ -12,7 +12,7 @@ const DEFAULTS = Object.freeze({
   archiveBytes: 64 * 1024 * 1024,
   scanBytes: 512 * 1024 * 1024,
   cacheSeconds: 300,
-  refreshSeconds: 5,
+  refreshSeconds: 300,
 });
 
 const MAX_INPUT = 4096;
@@ -68,7 +68,7 @@ function absoluteOutputPath(output) {
     path.join(process.cwd(), 'beacon-security-output');
   const absolute = path.resolve(candidate);
   // Both a directory and an explicitly configured JSON file are accepted. The
-  // worker always receives one concrete snapshot path and one history path.
+  // The worker receives one concrete local snapshot path when enabled.
   if (absolute.toLowerCase().endsWith('.json')) return absolute;
   return path.join(absolute, 'application.cdx.json');
 }
@@ -209,17 +209,18 @@ function emitSafely(callback, event) {
 /**
  * Background Node runtime SBOM inventory.
  *
- * The published mapping is replaced only after the worker has durably written
- * a CycloneDX snapshot and its history file. resolve() never touches disk or
- * asks the worker to scan; it only consults that immutable mapping.
+ * The published mapping is replaced only after a successful collection and
+ * optional local CycloneDX write. resolve() never touches disk or asks the
+ * worker to scan; it only consults that immutable mapping.
  */
 export class SbomInventory {
   constructor(identity = {}, output, onEvent) {
     this.identity = normalizeIdentity(identity);
     this.output = absoluteOutputPath(output);
-    this.onEvent = event =>
-      emitSafely(onEvent, eventRecord(event, this.identity));
-    this.sbomId = `urn:uuid:${randomUUID()}`;
+    this.onEvent = event => {
+      const projected = onlineEvent(eventRecord(event, this.identity));
+      if (projected) emitSafely(onEvent, projected);
+    };
     this.enabled = configuredFlag('beacon.security.sbom.enabled', true);
     this.settings = Object.freeze({
       maxComponents: configuredLimit(
@@ -246,7 +247,6 @@ export class SbomInventory {
         'beacon.security.sbom.refresh.seconds',
         DEFAULTS.refreshSeconds
       ),
-      healthSeconds: configuredLimit('beacon.security.sbom.health.seconds', 60),
       maxQueue: Math.max(
         1,
         Math.min(
@@ -265,13 +265,10 @@ export class SbomInventory {
     this.workerFailureReported = false;
     this.pendingClose = null;
     this.published = Object.freeze({
-      sbom_id: this.sbomId,
-      revision: 0,
-      release_id: 'unresolved',
-      application_id: this.identity.application_id,
       byPath: Object.freeze(Object.create(null)),
       byUrl: Object.freeze(Object.create(null)),
       byPackageRoot: Object.freeze(Object.create(null)),
+      components: Object.freeze(Object.create(null)),
       applicationRoots: Object.freeze([]),
     });
   }
@@ -288,7 +285,6 @@ export class SbomInventory {
         workerData: {
           identity: clone(this.identity),
           output: this.output,
-          sbomId: this.sbomId,
           include: includeRoots(),
           buildFile: this.buildFile,
           version: bounded(VERSION, 128),
@@ -339,12 +335,6 @@ export class SbomInventory {
       this.droppedObservations += 1;
     }
     this.pendingObservations.push(value);
-    if (
-      dropped &&
-      (this.droppedObservations === 1 ||
-        (this.droppedObservations & (this.droppedObservations - 1)) === 0)
-    )
-      this.#emitObservationHealth();
     this.#drainObservations();
     return true;
   }
@@ -353,27 +343,13 @@ export class SbomInventory {
   resolve(filename) {
     const snapshot = this.published;
     const lookup = lookupPath(filename);
-    const result = {
-      sbom_id: snapshot.sbom_id,
-      revision: snapshot.revision,
-      application_id: snapshot.application_id,
-      release_id: snapshot.release_id,
-      status: 'unresolved',
-    };
-    if (lookup.reason) {
-      result.reason = lookup.reason;
-      return componentReference(result, this.identity.application_id);
-    }
+    if (lookup.reason) return null;
     const match = snapshot.byUrl[lookup.url] || snapshot.byPath[lookup.path];
     if (!match) {
       let parent = lookup.path;
       for (let depth = 0; depth < 64; depth++) {
         const ref = snapshot.byPackageRoot?.[parent];
-        if (ref)
-          return componentReference(
-            { ...result, status: 'resolved', 'bom-ref': ref },
-            this.identity.application_id
-          );
+        if (ref) return componentReference(snapshot.components[ref]);
         const next = path.dirname(parent);
         if (next === parent) break;
         parent = next;
@@ -382,26 +358,25 @@ export class SbomInventory {
         withinPath(lookup.path, root)
       );
       if (applicationRoot) {
-        return componentReference(
-          { ...result, status: 'resolved', 'bom-ref': snapshot.application_id },
-          this.identity.application_id
-        );
+        const service = this.identity.service || {};
+        return componentReference({
+          name: service['service.name'] || service.name,
+          version: service['service.version'] || service.version,
+        });
       }
-      result.reason = 'unknown_filename';
-      return componentReference(result, this.identity.application_id);
+      return null;
     }
     // Keep the event component bounded and privacy-safe. The worker's
     // absolute source path is only an internal lookup key; a caller receives
     // the stable component reference and the observed URL query semantics.
-    const resolved = { status: match.status || 'resolved' };
-    for (const key of ['bom-ref', 'reason', 'observed_url', 'query']) {
-      if (match[key] !== undefined && match[key] !== '')
-        resolved[key] = bounded(match[key], MAX_INPUT);
+    if (match['bom-ref'] === this.identity.application_id) {
+      const service = this.identity.service || {};
+      return componentReference({
+        name: service['service.name'] || service.name,
+        version: service['service.version'] || service.version,
+      });
     }
-    return componentReference(
-      { ...result, ...resolved },
-      this.identity.application_id
-    );
+    return componentReference(snapshot.components[match['bom-ref']]);
   }
 
   async close(timeoutMillis = 1500) {
@@ -457,32 +432,6 @@ export class SbomInventory {
     }
   }
 
-  #emitObservationHealth() {
-    const snapshot = this.published;
-    emitSafely(this.onEvent, {
-      event_name: 'beacon.security.sbom.health',
-      status: 'degraded',
-      sbom_id: snapshot.sbom_id,
-      revision: snapshot.revision,
-      application_id: snapshot.application_id,
-      release_id: snapshot.release_id,
-      completeness: 'incomplete',
-      dropped_observations: this.droppedObservations,
-      reasons: ['observation_queue_full'],
-    });
-  }
-
-  #decorateEvent(event) {
-    if (!event || typeof event !== 'object') return event;
-    if (
-      event.event_name === 'beacon.security.sbom.health' ||
-      event.event_name === 'beacon.security.sbom.snapshot'
-    ) {
-      return { ...event, dropped_observations: this.droppedObservations };
-    }
-    return event;
-  }
-
   #onWorkerMessage(message) {
     if (!message || typeof message !== 'object') return;
     if (message.type === 'closed') {
@@ -498,7 +447,6 @@ export class SbomInventory {
       this.observationInFlight = Math.max(0, this.observationInFlight - 1);
       if (Number(message.dropped) > 0) {
         this.droppedObservations += Number(message.dropped);
-        this.#emitObservationHealth();
       }
       this.#drainObservations();
       return;
@@ -519,22 +467,21 @@ export class SbomInventory {
           : []
       );
       this.published = Object.freeze({
-        sbom_id: this.sbomId,
-        revision: Number(snapshot.revision) || 0,
-        release_id: bounded(snapshot.release_id, MAX_INPUT) || 'unresolved',
-        application_id: this.identity.application_id,
         byPath,
         byUrl,
         byPackageRoot,
+        components: Object.freeze({ ...(snapshot.components || {}) }),
         applicationRoots,
       });
       for (const event of Array.isArray(message.events) ? message.events : [])
-        emitSafely(this.onEvent, this.#decorateEvent(event));
+        emitSafely(this.onEvent, event);
       return;
     }
     if (message.type === 'event') {
-      emitSafely(this.onEvent, this.#decorateEvent(message.event));
+      // Collection failures do not replace the last successful inventory.
     }
+    if (message.type === 'failure')
+      this.lastFailure = bounded(message.error, 256);
   }
 
   #onWorkerFailure(error) {
@@ -542,25 +489,7 @@ export class SbomInventory {
     this.workerFailureReported = true;
     this.worker = null;
     this.observationInFlight = 0;
-    const snapshot = this.published;
-    emitSafely(this.onEvent, {
-      event_name: 'beacon.security.sbom.update_failed',
-      sbom_id: snapshot.sbom_id,
-      revision: snapshot.revision,
-      release_id: snapshot.release_id,
-      error_type: bounded(error?.name || 'WorkerError', 256),
-    });
-    emitSafely(this.onEvent, {
-      event_name: 'beacon.security.sbom.health',
-      status: 'degraded',
-      sbom_id: snapshot.sbom_id,
-      revision: snapshot.revision,
-      application_id: snapshot.application_id,
-      release_id: snapshot.release_id,
-      completeness: 'incomplete',
-      dropped_observations: this.droppedObservations,
-      reasons: ['worker_failure'],
-    });
+    this.lastFailure = bounded(error?.name || 'WorkerError', 256);
   }
 }
 

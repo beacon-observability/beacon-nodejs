@@ -62,26 +62,6 @@ export class SecurityState {
     if (!this.closed && this.gaps.size < 32)
       this.gaps.add(String(reason).slice(0, 256));
   }
-  diagnostics() {
-    if (!this.gaps.size && !this.truncated && this.collection_enabled)
-      return null;
-    return {
-      event_name: 'beacon.security.collection.incomplete',
-      trace_id: this.trace_id,
-      server_span_id: this.server_span_id,
-      trace_flags: this.server_span?.spanContext().traceFlags ?? 0,
-      truncated: this.truncated,
-      coverage_gaps: [...this.gaps].sort(),
-      collection_status: this.collection_status,
-      counts: {
-        objects: this.objectCount,
-        nodes: this.nodes.size,
-        sources: this.source_count,
-        findings: this.pending.length,
-        retained_bytes: this.bytes,
-      },
-    };
-  }
   exhaust(reason) {
     this.truncated = true;
     this.gap(reason);
@@ -365,7 +345,7 @@ export class SecurityState {
         schema_version: 1,
         source: 'beacon_security',
         event_name: 'beacon.security.finding',
-        evidence_id: previous?.evidence_id || 'ev-' + randomUUID(),
+        occurrence_id: previous?.occurrence_id || 'ev-' + randomUUID(),
         attack_evidence: attack,
         finding_id: fingerprint,
         fingerprint_version: 1,

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { runtimeIdentity } from './config.mjs';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const PRODUCT = 'io.beacon.security';
 export const FINGERPRINT_VERSION = 1;
 
@@ -104,21 +104,98 @@ export function traceId(value, length) {
     : '';
 }
 
-export function componentReference(value = {}, applicationId = '') {
-  value ||= {};
-  return {
-    status: value.status || 'unresolved',
-    sbom_id: value.sbom_id || '',
-    revision: value.revision ?? null,
-    release_id: value.release_id || '',
-    application_id: value.application_id || applicationId,
-    'bom-ref': value['bom-ref'] || '',
-    reason:
-      value.reason ||
-      (value.status === 'resolved' ? '' : 'component_not_resolved'),
-    observed_url: value.observed_url || '',
-    query: value.query || '',
+export function componentReference(value = {}) {
+  if (!value?.name) return null;
+  const result = { name: value.name, version: value.version || '' };
+  if (value.hash) result.hash = value.hash;
+  return result;
+}
+
+// Project internal detection records at the telemetry boundary. Fingerprints
+// and sampling continue to use the full record above this boundary.
+export function onlineEvent(value) {
+  if (value.event_name === 'beacon.security.sbom.inventory') {
+    const result = {
+      schema_version: 2,
+      source: 'beacon_security_sbom',
+      event_name: value.event_name,
+      instance_id: value.instance_id,
+      observed_at: value.observed_at,
+      started_at: value.started_at,
+      uptime_ms: value.uptime_ms,
+      dependencies: value.dependencies,
+    };
+    if (value.part_count > 1) {
+      result.part_index = value.part_index;
+      result.part_count = value.part_count;
+    }
+    return result;
+  }
+  if (value.event_name !== 'beacon.security.finding') return null;
+  const result = {
+    schema_version: 2,
+    source: 'beacon_security',
+    event_name: value.event_name,
+    instance_id: value.instance_id,
+    observed_at: value.observed_at,
+    finding_id: value.finding_id,
+    fingerprint_version: value.fingerprint_version,
+    occurrence_id: value.occurrence_id,
+    rule: value.rule,
+    attack_evidence: {
+      status: value.attack_evidence?.status || 'unknown',
+      reason: value.attack_evidence?.reason || 'analysis_unavailable',
+    },
+    sink: Object.fromEntries(
+      Object.entries(value.sink || {}).filter(
+        ([, item]) => item !== '' && item != null
+      )
+    ),
+    evidence_sampled: value.evidence_sampled === true,
+    collection_complete:
+      value.collection_complete !== false &&
+      value.truncated !== true &&
+      !value.coverage_gaps?.length,
   };
+  const request = Object.fromEntries(
+    ['method', 'route', 'status_code', 'error_type']
+      .filter(
+        key => value.request?.[key] !== '' && value.request?.[key] != null
+      )
+      .map(key => [key, value.request[key]])
+  );
+  if (Object.keys(request).length) result.request = request;
+  for (const key of ['trace_id', 'server_span_id', 'precision'])
+    if (value[key] !== '' && value[key] != null) result[key] = value[key];
+  if (value.current_span_id && value.current_span_id !== value.server_span_id)
+    result.current_span_id = value.current_span_id;
+  for (const key of [
+    'sources',
+    'propagation',
+    'ranges',
+    'stack',
+    'coverage_gaps',
+  ])
+    if (value[key]?.length) result[key] = value[key];
+  const component = value.component || {};
+  if (component.name) {
+    result.component = {
+      name: component.name,
+      version: component.version || '',
+    };
+    if (component.hash) result.component.hash = component.hash;
+  }
+  if (value.run && Object.keys(value.run).length) result.run = value.run;
+  if (value.triage?.decision && value.triage.decision !== 'unreviewed')
+    result.triage = value.triage;
+  if (value.truncated === true) {
+    result.truncated = true;
+    if (value.truncation_reason)
+      result.truncation_reason = value.truncation_reason;
+  }
+  if (!result.evidence_sampled && value.evidence_sample_reason)
+    result.evidence_sample_reason = value.evidence_sample_reason;
+  return result;
 }
 
 export function requestFields(value = {}) {
@@ -162,15 +239,11 @@ export function eventRecord(input, identity = {}) {
   }
   event.schema_version = SCHEMA_VERSION;
   event.source =
-    event.event_name === 'beacon.security.sbom.snapshot' ||
-    String(event.event_name).startsWith('beacon.security.sbom.')
+    event.event_name === 'beacon.security.sbom.inventory'
       ? 'beacon_security_sbom'
       : 'beacon_security';
   event.observed_at ||= new Date().toISOString();
-  if (
-    event.event_name === 'beacon.security.finding' ||
-    event.event_name === 'beacon.security.collection.incomplete'
-  ) {
+  if (event.event_name === 'beacon.security.finding') {
     event.request = requestFields(event.request);
     event.trace_id = traceId(event.trace_id, 32);
     event.server_span_id = event.trace_id
@@ -192,39 +265,6 @@ export function eventRecord(input, identity = {}) {
     };
     event.component = componentReference(event.component, event.application_id);
     event.stack ||= [];
-  }
-  if (event.event_name === 'beacon.security.collection.incomplete') {
-    event.counts = {
-      objects: null,
-      nodes: null,
-      sources: null,
-      findings: null,
-      retained_bytes: null,
-      ...event.counts,
-    };
-    event.collection_status ||= 'unknown';
-  }
-  if (event.event_name === 'beacon.security.sbom.snapshot') {
-    event.status ||= 'current';
-    event.dropped_observations ??= 0;
-  }
-  if (event.event_name === 'beacon.security.sbom.health') {
-    const defaults = {
-      sbom_id: '',
-      revision: 0,
-      release_id: '',
-      status: 'initializing',
-      last_refresh_at: null,
-      last_failure_at: null,
-      last_error_type: null,
-      current_components: null,
-      history_count: null,
-      completeness: 'incomplete',
-      reasons: [],
-      dropped_observations: 0,
-    };
-    for (const [key, value] of Object.entries(defaults))
-      if (event[key] === undefined) event[key] = value;
   }
   return event;
 }
