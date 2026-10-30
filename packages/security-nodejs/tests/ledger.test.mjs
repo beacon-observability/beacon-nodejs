@@ -3,6 +3,7 @@ import test from 'node:test';
 
 process.env.BEACON_SECURITY_NODE_INCLUDE = process.cwd();
 process.env.BEACON_SECURITY_ENABLED = 'true';
+process.env.BEACON_SECURITY_LOCAL_OUTPUT_ENABLED = 'true';
 const { RuntimeLedger } = await import('../src/exporter/ledger.mjs');
 const { instrumentationEnabled, loaderCompatibility } = await import(
   '../src/config.mjs'
@@ -118,7 +119,7 @@ test('control revisions drain runs and preserve CLI verification fields', () => 
     schema_version: 1,
     source: 'beacon_security',
     event_name: 'beacon.security.finding',
-    evidence_id: 'evidence-ledger-1',
+    occurrence_id: 'evidence-ledger-1',
     finding_id: 'finding-ledger-1',
     rule: 'sql_injection',
     observed_at: new Date().toISOString(),
@@ -207,7 +208,7 @@ test('repeated findings retain samples and count every request across runs', t =
     const original = {
       event_name: 'beacon.security.finding',
       finding_id: 'repeated-finding',
-      evidence_id: label,
+      occurrence_id: label,
       rule: 'sql_injection',
       observed_at: new Date(clock).toISOString(),
       trace_id: label === 'first' ? 'a'.repeat(32) : 'b'.repeat(32),
@@ -235,18 +236,17 @@ test('repeated findings retain samples and count every request across runs', t =
   clock += 1000;
   const repeated = request('repeat');
   assert.equal(repeated.length, 1);
-  assert.equal(repeated[0].occurrences_total, 2);
+  assert.equal(repeated[0].occurrences_total, undefined);
   assert.equal(repeated[0].occurrence_id, 'repeat');
   assert.equal(repeated[0].trace_id, 'b'.repeat(32));
-  assert.equal(repeated[0].aggregation_status, 'tracked');
   assert.equal(repeated[0].evidence_sampled, false);
-  assert.equal(repeated[0].truncation_reason, 'evidence_sampled_out');
+  assert.notEqual(repeated[0].truncated, true);
   for (const field of ['sources', 'propagation', 'ranges', 'stack'])
     assert.deepEqual(repeated[0][field], []);
   const finding = value.tick({}, { force: true }).findings.findings[0];
   assert.equal(finding.occurrences, 2);
   assert.equal(finding.last_trace_id, 'b'.repeat(32));
-  assert.equal(finding.representative.evidence_id, 'first');
+  assert.equal(finding.representative.occurrence_id, 'first');
   assert.deepEqual(finding.representative.propagation, [
     { id: 'first', parents: ['source-1'] },
   ]);
@@ -302,13 +302,7 @@ test('pause generation and active request budget are observable as incomplete', 
   value.applyControl({ revision: 'revision-4', paused: true });
   const incomplete = value.end(inFlight);
   assert.ok(inFlight.gaps.has('collection_paused_during_request'));
-  assert.equal(
-    incomplete[0].event_name,
-    'beacon.security.collection.incomplete'
-  );
-  assert.ok(
-    incomplete[0].coverage_gaps.includes('collection_paused_during_request')
-  );
+  assert.deepEqual(incomplete, []);
 
   value.applyControl({ revision: 'revision-5', paused: false });
   const health = value.health({ security_dropped: 0 });

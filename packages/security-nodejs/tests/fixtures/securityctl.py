@@ -88,9 +88,9 @@ def control(args, mutate):
 
 def query(args):
     directory = Path(args.dir)
-    name = {'findings': 'findings.json', 'runs': 'runs.json', 'sbom': 'application.cdx.json', 'history': 'sbom-history.json'}[args.kind]
+    name = {'findings': 'findings.json', 'runs': 'runs.json', 'sbom': 'application.cdx.json'}[args.kind]
     value = read(directory / name)
-    key = {'sbom': 'components', 'history': 'entries'}.get(args.kind, args.kind)
+    key = {'sbom': 'components'}.get(args.kind, args.kind)
     rows = value.get(key, [])
     ids = None
     if args.run and args.kind == 'findings':
@@ -249,7 +249,7 @@ def main():
     for name in ('pause', 'resume'):
         commands.add_parser(name)
     q = commands.add_parser('query')
-    q.add_argument('kind', choices=('findings', 'runs', 'sbom', 'history'), default='findings', nargs='?')
+    q.add_argument('kind', choices=('findings', 'runs', 'sbom'), default='findings', nargs='?')
     for name in ('rule', 'finding', 'run', 'case'):
         q.add_argument('--' + name)
     q.add_argument('--offset', type=int, default=0)

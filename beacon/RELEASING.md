@@ -68,3 +68,13 @@ After publication, install the exact public versions from npm in a clean
 application, repeat the zero-code injection smoke test, verify the exported
 APIs, and confirm that the GitHub tag resolves to both published package source
 commits.
+
+## Container distribution
+
+After stable npm and GitHub Release acceptance, use the separate
+[container distribution workflow](docker/nodejs/README.md#build-and-publish).
+Commit the exact three-package versions and production dependency lock first.
+The manually dispatched workflow validates the released artifacts, tests native
+amd64/arm64 candidates and promotes their archives through the `beacon-release`
+environment. It does not rebuild or republish the npm packages. Image tags use
+only the language product version and cannot be overwritten.

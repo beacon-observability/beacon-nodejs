@@ -7,13 +7,24 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
-- Isolate Beacon package tests from upstream-only Mocha hooks while retaining the supported runtime matrix.
+- Add a separate, manually approved GHCR distribution workflow for the published
+  Node.js packages, locked production dependencies, and a pinned Node.js 24 glibc
+  runtime. Test native amd64/arm64 images and isolated Kubernetes injection.
 
-- Build inherited packages with Node.js 24 and reinstall native dependencies before testing each supported runtime.
+## 2.0.0 - 2026-10-30
 
-- Keep Beacon package compilation compatible with the renamed upstream TypeScript configuration.
-
-- Adopted the verified OpenTelemetry source snapshot `0eb3a80a8ca977fe56b1`; Beacon product version remains unchanged.
+- Converge opt-in Node.js Security telemetry on the shared schema v2 contract:
+  per-request compact findings and periodic dependency inventories, with only
+  those two event families exported. Keep fingerprint v1 and bounded delivery.
+- Make the successful inventory interval 300 seconds by default, omit failed
+  replacement events, and remove online SBOM revisions and local history.
+- Adopt the released OpenTelemetry JavaScript Contrib source commit
+  `207b9dd1c7e30c12d5dec0e54e476e361b209484` while preserving upstream
+  history and Beacon package ownership.
+- Adjust Beacon compilation for the upstream TypeScript configuration and
+  isolate Beacon package tests from upstream-only Mocha hooks. Build inherited
+  packages with Node.js 24 and reinstall native dependencies before testing
+  each supported runtime.
 
 ## 1.3.1 - 2026-10-22
 

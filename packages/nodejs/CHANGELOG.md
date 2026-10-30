@@ -3,6 +3,12 @@
 
 ## Unreleased
 
+## 2.0.0 - 2026-10-30
+
+- Update the matching optional Security component to schema v2. Its OpenTelemetry
+  Logs now contain only request findings and periodic dependency inventories.
+- Retain the existing zero-code preload and default-disabled Security behavior.
+
 ## 1.3.1 - 2026-10-22
 
 - Coordinate Security, profiler and SDK shutdown before restoring sole-owner

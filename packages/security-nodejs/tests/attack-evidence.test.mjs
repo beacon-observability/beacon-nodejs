@@ -147,15 +147,15 @@ test('same-request upgrades keep the occurrence ID and count once', () => {
     assert.equal(detect(state, '14'), null);
     const upgrade = detect(state, '1 OR 1=1');
     assert.equal(upgrade.attack_evidence.status, 'suspected');
-    assert.equal(first.evidence_id, unknown.evidence_id);
-    assert.equal(first.evidence_id, upgrade.evidence_id);
+    assert.equal(first.occurrence_id, unknown.occurrence_id);
+    assert.equal(first.occurrence_id, upgrade.occurrence_id);
     assert.equal(detect(state, '16'), null);
     assert.equal(state.pending.length, 1);
     const event = ledger.end(state)[0];
-    assert.equal(event.occurrences_total, 1);
-    assert.deepEqual(
-      ledger.findings.get(event.finding_id).attack_evidence_counts,
-      { unknown: 0, no_evidence: 0, suspected: 1 }
+    assert.equal(event.occurrences_total, undefined);
+    assert.equal(
+      ledger.findings.get(event.finding_id).strongest_evidence_rank,
+      2
     );
   } finally {
     state.close();
@@ -166,7 +166,9 @@ test('request evidence and strongest representative remain independent across in
   process.env.BEACON_SECURITY_ANALYSIS_SQL_DIALECT = 'ansi';
   let clock = Date.now();
   t.mock.method(Date, 'now', () => clock);
+  process.env.BEACON_SECURITY_LOCAL_OUTPUT_ENABLED = 'true';
   const ledger = new RuntimeLedger(identity, 'attack', '');
+  process.env.BEACON_SECURITY_LOCAL_OUTPUT_ENABLED = 'false';
   const events = ['12', '1 OR 1=1', '14', 'customer_id', '16'].map(
     (fragment, index) => {
       if (index === 4) clock += ledger.sampleMillis + 1;
@@ -191,7 +193,7 @@ test('request evidence and strongest representative remain independent across in
   );
   assert.equal(events[1].evidence_sample_reason, 'evidence_upgrade');
   assert.equal(new Set(events.map(e => e.finding_id)).size, 1);
-  assert.equal(new Set(events.map(e => e.evidence_id)).size, 5);
+  assert.equal(new Set(events.map(e => e.occurrence_id)).size, 5);
   const finding = ledger.findings.get(events[0].finding_id);
   assert.deepEqual(finding.attack_evidence_counts, {
     unknown: 1,

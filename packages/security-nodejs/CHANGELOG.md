@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 - 2026-10-30
+
+- Adopt Beacon Security event schema v2 while retaining fingerprint v1.
+  Export only request findings and periodic dependency inventories through
+  OpenTelemetry Logs; remove health, summary, loss, and failure events.
+- Replace the dual occurrence identifiers with `occurrence_id`, remove online
+  cumulative counts and duplicate Resource fields, and retain evidence and
+  correlation when sampling omits detail.
+- Publish each successful inventory every 300 seconds by default, including
+  unchanged or valid empty lists. Failed collection leaves the last list
+  intact; large lists carry only necessary fragment fields.
+- Keep full finding representatives and local aggregates only when diagnostic
+  output is enabled. Stop writing SBOM history and retaining online revisions.
 
 ## 1.3.1 - 2026-10-22
 

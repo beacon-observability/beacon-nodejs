@@ -465,10 +465,8 @@ test(
         )
       );
       assert.ok(
-        express.evidence.some(
-          event =>
-            event.event_name === 'beacon.security.collection.incomplete' &&
-            event.coverage_gaps?.includes('shutdown_during_request')
+        express.evidence.every(
+          event => event.event_name === 'beacon.security.finding'
         )
       );
       assert.equal(express.health.status, 'incomplete');

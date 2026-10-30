@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import test, { after } from 'node:test';
 
@@ -46,12 +47,16 @@ const profile = 'profile-controls-test';
 
 function event(id = 'evidence-controls-1') {
   return {
-    schema_version: 1,
+    schema_version: 2,
     source: 'beacon_security',
     event_name: 'beacon.security.finding',
-    evidence_id: id,
-    finding_id: `finding-${id}`,
+    occurrence_id: id,
+    finding_id: `finding-${createHash('sha256').update(id).digest('hex')}`,
+    fingerprint_version: 1,
     rule: 'sql_injection',
+    attack_evidence: { status: 'unknown', reason: 'analysis_unavailable' },
+    evidence_sampled: true,
+    collection_complete: true,
     observed_at: new Date().toISOString(),
     trace_id: 'a'.repeat(32),
     server_span_id: 'b'.repeat(16),
@@ -163,9 +168,9 @@ test('Exporter drops on bounded queue overflow without blocking the caller', asy
     await exporter.initialization;
     exporter.securityQueueSize = 1;
     exporter.draining.security = true;
-    const original = { ...event('queue-1'), payload: { marker: 'before' } };
+    const original = event('queue-1');
     assert.equal(exporter.emit(original), true);
-    original.payload.marker = 'after';
+    original.sink.location = 'changed-after-queue';
     assert.equal(exporter.emit(event('queue-2')), false);
     exporter.draining.security = false;
     await exporter._drain('security');
@@ -177,8 +182,8 @@ test('Exporter drops on bounded queue overflow without blocking the caller', asy
     assert.ok(exporter.ledger.health(exporter.delivery()).delivery_loss >= 1);
     const sent = emitted
       .map(record => JSON.parse(String(record.body)))
-      .find(item => item.evidence_id === 'queue-1');
-    assert.equal(sent.payload.marker, 'before');
+      .find(item => item.occurrence_id === 'queue-1');
+    assert.equal(sent.sink.location, 'controls.test#query');
     results.push({
       check: 'queue-overflow',
       queue_full: exporter.counters['beacon.security.queue_full'],
@@ -191,54 +196,64 @@ test('Exporter drops on bounded queue overflow without blocking the caller', asy
   }
 });
 
-test('Exporter separates SBOM log sources through normal and truncated delivery', async () => {
+test('Exporter routes only finding and inventory with matching OTel sources', async () => {
   const output = await outputDirectory('sbom-source');
   const exporter = new Exporter(identity, profile, output);
   try {
     await exporter.initialization;
-    for (const maxBytes of [65536, 256, 128]) {
-      exporter.maxBytes = maxBytes;
-      for (const [eventName, source] of [
-        ['beacon.security.finding', 'beacon_security'],
-        ['beacon.security.sbom.snapshot', 'beacon_security_sbom'],
-        ['beacon.security.sbom.health', 'beacon_security_sbom'],
-        ['beacon.security.sbom.update_failed', 'beacon_security_sbom'],
-        ['beacon.security.sbom.export.dropped', 'beacon_security_sbom'],
-      ]) {
-        const start = emitted.length;
-        assert.equal(
-          exporter.emit({
-            event_name: eventName,
-            source: 'caller-override',
-            sbom_id: 'source-test',
-            payload: 'x'.repeat(4096),
-          }),
-          true
-        );
-        await waitFor(() => emitted.length > start, 'source routing log');
-        const log = emitted[start];
-        const body = JSON.parse(String(log.body));
-        assert.equal(log.attributes.source, source);
-        assert.equal(body.source, source);
-        assert.equal(log.eventName, body.event_name);
-        assert.equal(log.attributes['event.name'], body.event_name);
-        assert.ok(Buffer.byteLength(log.body) <= maxBytes);
-        if (maxBytes === 65536) assert.equal(body.event_name, eventName);
-        else {
-          assert.equal(body.event_name, 'beacon.security.export.truncated');
-          assert.equal(
-            body.original_event,
-            maxBytes === 256 ? eventName : undefined
-          );
-        }
-      }
+    const start = emitted.length;
+    assert.equal(exporter.emit(event('source-finding')), true);
+    assert.equal(
+      exporter.emit({
+        event_name: 'beacon.security.sbom.inventory',
+        instance_id: identity.instance_id,
+        observed_at: new Date().toISOString(),
+        started_at: new Date(Date.now() - 1000).toISOString(),
+        uptime_ms: 1000,
+        dependencies: [],
+      }),
+      true
+    );
+    for (const name of [
+      'beacon.security.sbom.health',
+      'beacon.security.export.dropped',
+    ])
+      assert.equal(exporter.emit({ event_name: name }), false);
+    await waitFor(
+      () => emitted.length >= start + 2,
+      'two canonical log records'
+    );
+    const records = emitted.slice(start, start + 2);
+    for (const record of records) {
+      const body = JSON.parse(String(record.body));
+      assert.equal(record.attributes.source, body.source);
+      assert.equal(record.eventName, body.event_name);
+      assert.equal(record.attributes['event.name'], body.event_name);
+      assert.equal(body.schema_version, 2);
     }
+    assert.deepEqual(
+      records.map(record => JSON.parse(record.body).event_name),
+      ['beacon.security.finding', 'beacon.security.sbom.inventory']
+    );
+    exporter.maxBytes = 100;
+    assert.throws(
+      () =>
+        exporter._encodeRecord({
+          event_name: 'beacon.security.sbom.inventory',
+          source: 'beacon_security_sbom',
+          dependencies: [{ name: 'oversized', version: '1' }],
+          padding: 'x'.repeat(200),
+        }),
+      /record_limit/
+    );
+    assert.equal(emitted.length, start + 2);
   } finally {
     await closeExporter(exporter);
+    await rm(output, { recursive: true, force: true });
   }
 });
 
-test('Exporter enforces UTF-8 byte budgets and keeps truncation events canonical', async () => {
+test('Exporter truncates UTF-8 finding evidence and drops records below the byte budget', async () => {
   const output = await outputDirectory('utf8-budget');
   const previousEvidence = process.env.BEACON_SECURITY_EVIDENCE_FILE;
   process.env.BEACON_SECURITY_EVIDENCE_FILE = join(output, 'evidence.jsonl');
@@ -246,49 +261,52 @@ test('Exporter enforces UTF-8 byte budgets and keeps truncation events canonical
   delete process.env.BEACON_SECURITY_EVIDENCE_FILE;
   try {
     await exporter.initialization;
-    exporter.maxBytes = 256;
-    const oversized = { ...event('utf8-budget'), payload: 'é'.repeat(512) };
-    const original = structuredClone(oversized);
-    const encoded = exporter._encodeRecord(oversized);
-    assert.deepEqual(oversized, original);
-    assert.ok(Buffer.isBuffer(encoded.bytes));
+    exporter.maxBytes = 1024;
+    const oversized = { ...event('utf8-budget'), stack: ['é'.repeat(1024)] };
+    const { onlineEvent } = await import('../src/schema.mjs');
+    const projected = onlineEvent(oversized);
+    const original = structuredClone(projected);
+    const encoded = exporter._encodeRecord(projected);
+    assert.deepEqual(projected, original);
     assert.equal(
       encoded.bytes.byteLength,
       Buffer.byteLength(encoded.bytes.toString('utf8'))
     );
     assert.ok(encoded.bytes.byteLength <= exporter.maxBytes);
-    assert.equal(encoded.event.event_name, 'beacon.security.export.truncated');
-    assert.equal(encoded.event.schema_version, 1);
-    assert.equal(encoded.event.source, 'beacon_security');
+    assert.equal(encoded.event.event_name, 'beacon.security.finding');
+    assert.equal(encoded.event.schema_version, 2);
+    assert.equal(encoded.event.truncated, true);
+    assert.equal(encoded.event.collection_complete, false);
+    assert.equal(encoded.event.truncation_reason, 'record_byte_limit');
+    assert.equal(encoded.event.stack, undefined);
 
+    const start = emitted.length;
     assert.equal(exporter.emit(oversized, { evidence: true }), true);
-    await waitFor(
-      () => (exporter.counters['beacon.security.file_written'] || 0) >= 1,
-      'utf8 truncation write'
-    );
-    const captured = emitted.find(record => {
-      try {
-        return JSON.parse(String(record.body)).evidence_id === 'utf8-budget';
-      } catch {
-        return false;
-      }
-    });
-    assert.ok(captured);
+    await waitFor(() => emitted.length > start, 'utf8 truncated finding');
+    const captured = emitted[start];
     const capturedBody = JSON.parse(String(captured.body));
-    assert.equal(captured.eventName, capturedBody.event_name);
-    assert.equal(captured.attributes['event.name'], capturedBody.event_name);
-    assert.equal(captured.attributes.source, 'beacon_security');
-    assert.equal(capturedBody.source, 'beacon_security');
-    assert.equal(capturedBody.event_name, encoded.event.event_name);
+    assert.equal(capturedBody.occurrence_id, 'utf8-budget');
+    assert.equal(capturedBody.truncated, true);
+    assert.equal(capturedBody.collection_complete, false);
+    assert.equal(capturedBody.stack, undefined);
     const { trace } = await import('@opentelemetry/api');
     const capturedSpan = trace.getSpanContext(captured.context);
     assert.equal(capturedSpan.traceId, oversized.trace_id);
     assert.equal(capturedSpan.spanId, oversized.server_span_id);
     assert.equal(capturedSpan.traceFlags, oversized.trace_flags);
+    await waitFor(
+      () => (exporter.counters['beacon.security.file_written'] || 0) >= 1,
+      'utf8 evidence file'
+    );
 
     exporter.securityBytesPerSecond = encoded.bytes.byteLength - 1;
-    const dropped = { ...oversized, evidence_id: 'utf8-budget-drop' };
-    assert.equal(exporter.emit(dropped, { evidence: true }), true);
+    assert.equal(
+      exporter.emit(
+        { ...oversized, occurrence_id: 'utf8-budget-drop' },
+        { evidence: true }
+      ),
+      true
+    );
     await waitFor(
       () => (exporter.counters['beacon.security.budget_exceeded'] || 0) >= 1,
       'utf8 budget drop'
@@ -300,14 +318,6 @@ test('Exporter enforces UTF-8 byte budgets and keeps truncation events canonical
       budget_bytes: exporter.securityBytesPerSecond,
       budget_exceeded: exporter.counters['beacon.security.budget_exceeded'],
       security_dropped: exporter.delivery().security_dropped,
-      captured_log: {
-        event_name: captured.eventName,
-        body_event_name: capturedBody.event_name,
-        source: captured.attributes.source,
-        trace_id: capturedSpan.traceId,
-        span_id: capturedSpan.spanId,
-        trace_flags: capturedSpan.traceFlags,
-      },
     });
   } finally {
     await closeExporter(exporter);
@@ -318,7 +328,7 @@ test('Exporter enforces UTF-8 byte budgets and keeps truncation events canonical
   }
 });
 
-test('SBOM rate limiting defers queued snapshots while security events keep flowing', async () => {
+test('SBOM rate limiting defers queued inventories while findings keep flowing', async () => {
   const output = await outputDirectory('sbom-deferred');
   const exporter = new Exporter(identity, profile, output);
   try {
@@ -326,9 +336,13 @@ test('SBOM rate limiting defers queued snapshots while security events keep flow
     exporter.sbomEventsPerSecond = 1;
     for (let index = 0; index < 3; index++) {
       exporter.emit({
-        event_name: 'beacon.security.sbom.snapshot',
-        sbom_id: 'deferred-fixture',
-        revision: index,
+        event_name: 'beacon.security.sbom.inventory',
+        instance_id: identity.instance_id,
+        observed_at: new Date(
+          Date.UTC(2026, 9, 27, 9, 20, index)
+        ).toISOString(),
+        started_at: '2026-10-27T09:00:00.000Z',
+        uptime_ms: 1200000 + index * 1000,
         dependencies: [{ name: 'pkg', version: '1' }],
       });
     }
@@ -341,16 +355,19 @@ test('SBOM rate limiting defers queued snapshots while security events keep flow
       () =>
         emitted.some(
           record =>
-            JSON.parse(record.body).evidence_id === 'during-sbom-deferral'
+            JSON.parse(record.body).occurrence_id === 'during-sbom-deferral'
         ),
       'independent security queue'
     );
     await waitFor(
       () =>
         emitted.filter(
-          record => JSON.parse(record.body).sbom_id === 'deferred-fixture'
+          record =>
+            JSON.parse(record.body).event_name ===
+              'beacon.security.sbom.inventory' &&
+            JSON.parse(record.body).observed_at.startsWith('2026-10-27T09:20:')
         ).length === 3,
-      'all snapshots delivered',
+      'all inventories delivered',
       4000
     );
     assert.equal(exporter.delivery().sbom_dropped, 0);
@@ -652,11 +669,7 @@ test('CLI controls run start/stop drain, pause/resume, revision rejection, and v
     incompleteRequest.sink_counts.sql_injection = 1;
     incompleteRequest.gap('fixture_state_gap');
     const incompleteEvents = exporter.ledger.end(incompleteRequest);
-    assert.ok(
-      incompleteEvents.some(
-        value => value.event_name === 'beacon.security.collection.incomplete'
-      )
-    );
+    assert.deepEqual(incompleteEvents, []);
     for (const value of incompleteEvents)
       exporter.emit(value, { evidence: true });
     await waitFor(

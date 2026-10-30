@@ -13,8 +13,7 @@ const settings = {
   maxArchiveBytes: positive(data.settings?.maxArchiveBytes, 64 * 1024 * 1024),
   maxScanBytes: positive(data.settings?.maxScanBytes, 512 * 1024 * 1024),
   cacheSeconds: positive(data.settings?.cacheSeconds, 300),
-  refreshSeconds: positive(data.settings?.refreshSeconds, 5),
-  healthSeconds: positive(data.settings?.healthSeconds, 60),
+  refreshSeconds: positive(data.settings?.refreshSeconds, 300),
   maxQueue: positive(data.settings?.maxQueue, 4096),
 };
 
@@ -23,7 +22,6 @@ const output = path.resolve(
   bounded(data.output, 4096) ||
     path.join(process.cwd(), 'beacon-security-output', 'application.cdx.json')
 );
-const historyPath = path.join(path.dirname(output), 'sbom-history.json');
 const localOutputEnabled = data.localOutputEnabled === true;
 const include = Array.isArray(data.include)
   ? data.include
@@ -33,6 +31,7 @@ const include = Array.isArray(data.include)
   : [process.cwd()];
 const buildFile = bounded(data.buildFile, 4096);
 const toolVersion = bounded(data.version, 128);
+const startedAt = new Date(Date.now() - process.uptime() * 1000).toISOString();
 const applicationId =
   bounded(identity.application_id, 1024) ||
   `app-${sha256('unknown-node-application')}`;
@@ -47,26 +46,13 @@ const state = {
   lastSuccessAt: '',
   lastFailureAt: '',
   lastErrorType: '',
-  published: {
-    revision: 0,
-    releaseId: 'unresolved',
-    contentSha256: '',
-    componentCount: 0,
-    reasons: new Set(['runtime_dependency_graph_incomplete']),
-    quality: emptyQuality(),
-  },
-  previousDigests: new Map(),
-  history: new Map(),
-  historyLoaded: false,
   baseCache: null,
   baseCacheKey: '',
   baseCacheAt: 0,
   baseGeneration: 0,
   observationRevision: 0,
-  publishedInputs: '',
-  forcePublish: false,
   lastPublishAt: 0,
-  lastHealthAt: 0,
+  lastObservedAtMillis: 0,
   loadedComponents: new Map(),
 };
 
@@ -1136,7 +1122,6 @@ function dependencyRecords(dependencies) {
 }
 
 function toDocument(
-  revision,
   records,
   dependencies,
   reasons,
@@ -1167,7 +1152,7 @@ function toDocument(
     bomFormat: 'CycloneDX',
     specVersion: '1.7',
     serialNumber: sbomId,
-    version: revision,
+    version: 1,
     metadata: {
       timestamp: nowIso(),
       lifecycles: [{ phase: 'operations' }],
@@ -1186,24 +1171,6 @@ function toDocument(
     dependencies: dependencyRecords(dependencies),
     compositions: [{ aggregate: 'incomplete', assemblies: [applicationId] }],
     properties,
-  };
-}
-
-function historyDocument(revision, release) {
-  return {
-    schema_version: 1,
-    source: 'beacon_security',
-    sbom_id: sbomId,
-    revision,
-    application_id: applicationId,
-    release_id: release.id,
-    updated_at: nowIso(),
-    entries: [...state.history.values()].sort((left, right) =>
-      left['bom-ref'].localeCompare(right['bom-ref'])
-    ),
-    history_limit: Math.max(0, settings.maxComponents - 1),
-    history_complete:
-      state.history.size < Math.max(0, settings.maxComponents - 1),
   };
 }
 
@@ -1232,101 +1199,6 @@ function writeJsonAtomic(filename, value) {
       fs.unlinkSync(temporary);
     } catch {}
     throw error;
-  }
-}
-
-function writePair(document, history) {
-  const parent = path.dirname(output);
-  fs.mkdirSync(parent, { recursive: true });
-  let documentTemp = '';
-  let historyTemp = '';
-  const documentBackup = `${output}.${process.pid}.${crypto.randomUUID()}.old`;
-  const historyBackup = `${historyPath}.${process.pid}.${crypto.randomUUID()}.old`;
-  let documentMoved = false;
-  let historyMoved = false;
-  let documentBacked = false;
-  let historyBacked = false;
-  try {
-    documentTemp = writeJsonAtomic(output, document);
-    historyTemp = writeJsonAtomic(historyPath, history);
-    if (safeStat(output)) {
-      fs.renameSync(output, documentBackup);
-      documentBacked = true;
-    }
-    if (safeStat(historyPath)) {
-      fs.renameSync(historyPath, historyBackup);
-      historyBacked = true;
-    }
-    fs.renameSync(documentTemp, output);
-    documentMoved = true;
-    fs.renameSync(historyTemp, historyPath);
-    historyMoved = true;
-    try {
-      const dir = fs.openSync(parent, 'r');
-      try {
-        fs.fsyncSync(dir);
-      } finally {
-        fs.closeSync(dir);
-      }
-    } catch {}
-    if (documentBacked) {
-      try {
-        fs.unlinkSync(documentBackup);
-      } catch {}
-    }
-    if (historyBacked) {
-      try {
-        fs.unlinkSync(historyBackup);
-      } catch {}
-    }
-  } catch (error) {
-    if (documentMoved) {
-      try {
-        fs.unlinkSync(output);
-      } catch {}
-    }
-    if (historyMoved) {
-      try {
-        fs.unlinkSync(historyPath);
-      } catch {}
-    }
-    if (documentBacked) {
-      try {
-        fs.renameSync(documentBackup, output);
-      } catch {}
-    }
-    if (historyBacked) {
-      try {
-        fs.renameSync(historyBackup, historyPath);
-      } catch {}
-    }
-    throw error;
-  } finally {
-    for (const filename of [
-      documentTemp,
-      historyTemp,
-      documentBackup,
-      historyBackup,
-    ]) {
-      try {
-        fs.unlinkSync(filename);
-      } catch {}
-    }
-  }
-}
-
-function loadExistingHistory(context, reasons) {
-  if (state.historyLoaded) return;
-  state.historyLoaded = true;
-  if (!safeStat(historyPath)) return;
-  const value = readJson(historyPath, context, reasons, 'history');
-  if (!value || !Array.isArray(value.entries)) return;
-  for (const entry of value.entries.slice(
-    0,
-    Math.max(0, settings.maxComponents - 1)
-  )) {
-    if (entry && typeof entry === 'object' && entry['bom-ref'])
-      state.history.set(bounded(entry['bom-ref'], 2048), { ...entry });
   }
 }
 
@@ -1512,71 +1384,24 @@ function cloneComponent(component) {
   };
 }
 
-function snapshotPayload(
-  records,
-  dependencies,
-  reasons,
-  mapping,
-  release,
-  contentSha256
-) {
+function snapshotPayload(records, mapping) {
   return {
-    revision: state.published.revision,
-    release_id: release.id,
-    content_sha256: contentSha256,
     byPath: mapping.byPath,
     byUrl: mapping.byUrl,
     byPackageRoot: mapping.byPackageRoot,
     application_roots: mapping.applicationRoots,
-    quality: quality(records),
-    reasons: [...reasons].sort(),
-    component_count: records.size,
-  };
-}
-
-function updateHistory(recordDigests) {
-  const previous = state.previousDigests;
-  for (const [ref, digest] of recordDigests) {
-    if (previous.get(ref) === digest) continue;
-    let historical = state.history.get(ref);
-    if (
-      !historical &&
-      state.history.size < Math.max(0, settings.maxComponents - 1)
-    ) {
-      historical = { 'bom-ref': ref, first_seen: nowIso() };
-      state.history.set(ref, historical);
-    }
-    if (historical) {
-      historical.state = 'current';
-      historical.last_changed_at = nowIso();
-    }
-  }
-  for (const ref of previous.keys()) {
-    if (recordDigests.has(ref)) continue;
-    const historical = state.history.get(ref);
-    if (historical) {
-      historical.state = 'removed';
-      historical.last_changed_at = nowIso();
-    }
-  }
-}
-
-function health(status, reasons) {
-  return {
-    event_name: 'beacon.security.sbom.health',
-    status,
-    sbom_id: sbomId,
-    revision: state.published.revision,
-    application_id: applicationId,
-    release_id: state.published.releaseId,
-    instance_id: bounded(identity.instance_id, 1024),
-    last_refresh_at: state.lastSuccessAt || null,
-    last_failure_at: state.lastFailureAt || null,
-    last_error_type: state.lastErrorType || null,
-    current_components: state.published.componentCount,
-    history_count: state.history.size,
-    completeness: 'incomplete',
-    reasons: [...(reasons || state.published.reasons)].sort(),
+    components: Object.fromEntries(
+      [...records].map(([ref, component]) => [
+        ref,
+        {
+          name: component.group
+            ? `${component.group}:${component.name}`
+            : component.name,
+          ...(component.version ? { version: component.version } : {}),
+          ...(component.artifactHash ? { hash: component.artifactHash } : {}),
+        },
+      ])
+    ),
   };
 }
 
@@ -1588,18 +1413,12 @@ function publish() {
   }
   state.refreshing = true;
   try {
+    const uptimeAtStart = Math.floor(process.uptime() * 1000);
+    const observedAtMillis = Math.max(
+      Date.now(),
+      state.lastObservedAtMillis + 1
+    );
     const base = discover();
-    const buildStat = buildFile ? safeStat(buildFile) : null;
-    const inputs = `${base.generation}|${state.observationRevision}|${buildStat?.size || 0}|${buildStat?.mtimeMs || 0}`;
-    const force = state.forcePublish;
-    state.forcePublish = false;
-    if (!force && inputs === state.publishedInputs) {
-      if (Date.now() - state.lastHealthAt >= settings.healthSeconds * 1000) {
-        state.lastHealthAt = Date.now();
-        parentPort.postMessage({ type: 'event', event: health('current') });
-      }
-      return;
-    }
     state.lastPublishAt = Date.now();
     const reasons = new Set(
       base.reasons || ['runtime_dependency_graph_incomplete']
@@ -1639,129 +1458,54 @@ function publish() {
       entries: base.budget?.entries || 0,
       scanBytes: base.budget?.scanBytes || 0,
     };
-    if (localOutputEnabled) loadExistingHistory(context, reasons);
-    const build = loadBuildFile(context, reasons);
+    const build = localOutputEnabled ? loadBuildFile(context, reasons) : null;
     mergeBuild(records, dependencies, build, reasons);
-    const release = releaseId(records);
-    const app = applicationRecord();
-    const stable = {
-      application: app,
-      records: recordEntries(records).map(componentRecord),
-      dependencies: dependencyRecords(dependencies),
-      reasons: [...reasons].sort(),
-      release_id: release.id,
-      mapping: {
-        byPath: mapping.byPath,
-        byUrl: mapping.byUrl,
-        byPackageRoot: mapping.byPackageRoot,
-        applicationRoots: mapping.applicationRoots,
-      },
-    };
-    const contentSha256 = sha256(stableJson(stable));
-    if (contentSha256 === state.published.contentSha256) {
-      state.publishedInputs = inputs;
-      state.lastSuccessAt = nowIso();
-      state.published.reasons = reasons;
-      if (
-        force ||
-        Date.now() - state.lastHealthAt >= settings.healthSeconds * 1000
-      ) {
-        state.lastHealthAt = Date.now();
-        parentPort.postMessage({
-          type: 'event',
-          event: health('current', reasons),
-        });
-      }
-      return;
-    }
-    const revision = state.published.revision + 1;
-    const document = toDocument(
-      revision,
-      records,
-      dependencies,
-      reasons,
-      release,
-      contentSha256,
-      app,
-      stable.records
-    );
+    const componentRecords = recordEntries(records).map(componentRecord);
     const snapshotEvents = dependencySnapshot(
       {
-        event_name: 'beacon.security.sbom.snapshot',
-        status: 'current',
-        sbom_id: sbomId,
-        revision,
-        application_id: applicationId,
-        release_id: release.id,
+        event_name: 'beacon.security.sbom.inventory',
         instance_id: bounded(identity.instance_id, 1024),
-        completeness: 'incomplete',
-        reasons: [...reasons].sort(),
+        observed_at: new Date(observedAtMillis).toISOString(),
+        started_at: startedAt,
+        uptime_ms: uptimeAtStart,
       },
-      stable.records,
+      componentRecords,
       identity
     );
-    const recordDigests = new Map(
-      stable.records.map(record => [
-        record['bom-ref'],
-        sha256(stableJson(record)),
-      ])
-    );
-    const historyBefore = new Map(
-      [...state.history].map(([key, value]) => [key, { ...value }])
-    );
-    updateHistory(recordDigests);
-    const history = historyDocument(revision, release);
     if (localOutputEnabled) {
-      try {
-        writePair(document, history);
-      } catch (error) {
-        state.history = historyBefore;
-        throw error;
-      }
-    }
-    state.previousDigests = recordDigests;
-    state.published = {
-      revision,
-      releaseId: release.id,
-      contentSha256,
-      componentCount: records.size,
-      reasons,
-      quality: quality(records),
-    };
-    state.lastSuccessAt = nowIso();
-    state.publishedInputs = inputs;
-    state.lastHealthAt = Date.now();
-    parentPort.postMessage({
-      type: 'published',
-      snapshot: snapshotPayload(
+      const release = releaseId(records);
+      const stable = {
+        application: applicationRecord(),
+        records: componentRecords,
+        dependencies: dependencyRecords(dependencies),
+        reasons: [...reasons].sort(),
+        release_id: release.id,
+      };
+      const document = toDocument(
         records,
         dependencies,
         reasons,
-        mapping,
         release,
-        contentSha256
-      ),
-      events: [...snapshotEvents, health('current', reasons)],
+        sha256(stableJson(stable)),
+        stable.application,
+        componentRecords
+      );
+      const temporary = writeJsonAtomic(output, document);
+      fs.renameSync(temporary, output);
+    }
+    state.lastSuccessAt = nowIso();
+    state.lastObservedAtMillis = observedAtMillis;
+    parentPort.postMessage({
+      type: 'published',
+      snapshot: snapshotPayload(records, mapping),
+      events: snapshotEvents,
     });
   } catch (error) {
     state.lastFailureAt = nowIso();
     state.lastErrorType = bounded(error?.name || 'Error', 256);
     parentPort.postMessage({
-      type: 'event',
-      event: {
-        event_name: 'beacon.security.sbom.update_failed',
-        sbom_id: sbomId,
-        revision: state.published.revision,
-        release_id: state.published.releaseId,
-        error_type: state.lastErrorType,
-      },
-    });
-    parentPort.postMessage({
-      type: 'event',
-      event: health(
-        'degraded',
-        new Set([...state.published.reasons, 'update_failed'])
-      ),
+      type: 'failure',
+      error: bounded(error?.message || state.lastErrorType, 256),
     });
   } finally {
     state.refreshing = false;
@@ -1769,12 +1513,16 @@ function publish() {
       state.refreshAgain = false;
       scheduleRefresh(0);
     } else if (state.closeAfterRefresh) finishClose();
+    else if (!state.closing) scheduleRefresh(settings.refreshSeconds * 1000);
   }
 }
 
 function scheduleRefresh(delay = 10) {
   if (state.closing) return;
-  if (state.pendingTimer) return;
+  if (state.pendingTimer) {
+    if (delay !== 0) return;
+    clearTimeout(state.pendingTimer);
+  }
   state.pendingTimer = setTimeout(
     () => {
       state.pendingTimer = null;
@@ -1809,11 +1557,9 @@ parentPort.on('message', message => {
         state.observations.delete(oldest);
         dropped = 1;
       }
-      scheduleRefresh(0);
     }
     state.observations.set(key, value);
     state.observationRevision++;
-    scheduleRefresh(10);
     return { accepted: 1, dropped };
   };
   if (message.type === 'observe_batch') {
@@ -1842,26 +1588,9 @@ parentPort.on('message', message => {
       queue_size: state.observations.size,
     });
   } else if (message.type === 'refresh') {
-    state.forcePublish = true;
     scheduleRefresh(0);
   } else if (message.type === 'close') {
     if (state.refreshing) state.closeAfterRefresh = true;
-    else if (state.pendingTimer) {
-      // Observations are delivered over the same MessagePort before close,
-      // but their refresh is intentionally deferred to batch loader traffic.
-      // Publish that pending batch before acknowledging shutdown so a fast
-      // application cannot leave its final loaded modules out of the durable
-      // snapshot and component mapping.
-      clearTimeout(state.pendingTimer);
-      state.pendingTimer = null;
-      state.closeAfterRefresh = true;
-      publish();
-    } else finishClose();
+    else finishClose();
   }
 });
-
-const interval = setInterval(
-  () => scheduleRefresh(0),
-  Math.min(settings.refreshSeconds * 1000, 2_147_483_647)
-);
-interval.unref?.();

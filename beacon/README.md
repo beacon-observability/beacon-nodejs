@@ -47,6 +47,7 @@ inherited upstream packages retain their own publication lifecycle.
 - [Verified Beacon-specific contributors](CONTRIBUTORS.md)
 - [Product version](version.properties)
 - [Release prerequisites](RELEASING.md)
+- [Container distribution and Kubernetes injection](docker/nodejs/README.md)
 - [Beacon Node.js 1.3.1 release acceptance](validation/1.3.1.md)
 - [Beacon Node.js 1.3.0 release acceptance](validation/1.3.0.md)
 - [Beacon Node.js package documentation](../packages/nodejs/README.md)
@@ -69,10 +70,12 @@ The Beacon-owned `@beacon-observability/nodejs` package:
 
 The Beacon Security workspace:
 
-- follows the pinned Beacon Security schema and fingerprint v1 contract;
+- follows the pinned Beacon Security schema v2 and fingerprint v1 contract in
+  the unreleased source; the public 1.3.1 packages retain schema v1;
 - models bounded flows from selected HTTP inputs to SQL, command, outbound
   HTTP, and file sinks;
-- publishes findings and runtime SBOM snapshots through OpenTelemetry Logs;
+- publishes request findings and periodic runtime dependency inventories through
+  OpenTelemetry Logs;
 - remains disabled by default and does not enable local files implicitly; and
 - requires Node.js 22.22.3+ or 24.11.1+ when enabled.
 

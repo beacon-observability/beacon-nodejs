@@ -106,7 +106,7 @@ test(
       inventory.observe(`${pathToFileURL(appFile).href}?source=loader`);
       const snapshot = await waitFor(
         events,
-        event => event.event_name === 'beacon.security.sbom.snapshot'
+        event => event.event_name === 'beacon.security.sbom.inventory'
       );
       const document = JSON.parse(
         await fs.readFile(path.join(output, 'application.cdx.json'), 'utf8')
@@ -144,7 +144,7 @@ test(
         )
       );
       assert.equal(document.metadata.component['bom-ref'], 'app-fixture');
-      assert.equal(snapshot.revision, 1);
+      assert.equal(snapshot.schema_version, 2);
       assert.deepEqual(snapshot.dependencies, [
         { name: 'trusted-pkg', version: '2.0.0' },
       ]);
@@ -154,16 +154,15 @@ test(
       const resolvedApp = inventory.resolve(
         `${pathToFileURL(appFile).href}?source=loader`
       );
-      assert.equal(resolvedPackage.status, 'resolved');
-      assert.equal(resolvedPackage['bom-ref'], component['bom-ref']);
-      assert.equal(resolvedPackage.revision, snapshot.revision);
-      assert.equal(resolvedPackage.query, '?cache=1');
-      assert.equal(resolvedApp['bom-ref'], 'app-fixture');
-      const history = JSON.parse(
-        await fs.readFile(path.join(output, 'sbom-history.json'), 'utf8')
-      );
-      assert.equal(history.revision, snapshot.revision);
-      assert.equal(history.sbom_id, snapshot.sbom_id);
+      assert.deepEqual(resolvedPackage, {
+        name: 'trusted-pkg',
+        version: '2.0.0',
+      });
+      assert.deepEqual(resolvedApp, { name: 'fixture-app', version: '' });
+      assert.equal(document.version, 1);
+      await assert.rejects(fs.access(path.join(output, 'sbom-history.json')), {
+        code: 'ENOENT',
+      });
     } finally {
       await inventory.close();
       delete process.env.BEACON_SECURITY_NODE_INCLUDE;
@@ -196,7 +195,7 @@ test('compact snapshots split by encoded bytes and retain only loaded package id
       version: '2.0',
     });
     const parts = dependencySnapshot(
-      { sbom_id: 'fixture', revision: 3 },
+      { instance_id: '11111111-1111-4111-8111-111111111111' },
       records,
       {}
     );
@@ -261,7 +260,7 @@ test(
       await waitFor(
         events,
         event =>
-          event.event_name === 'beacon.security.sbom.snapshot' &&
+          event.event_name === 'beacon.security.sbom.inventory' &&
           event.dependencies.length === 3
       );
       const document = JSON.parse(
@@ -272,22 +271,22 @@ test(
           item => item.name === name && item.version === version
         );
         assert.ok(component);
-        assert.equal(
-          inventory.resolve(pathToFileURL(filename))['bom-ref'],
-          component['bom-ref']
-        );
+        assert.deepEqual(inventory.resolve(pathToFileURL(filename)), {
+          name,
+          version,
+        });
       }
-      assert.equal(
-        inventory.resolve(`${pathToFileURL(alias).href}?alias=1`)['bom-ref'],
-        inventory.resolve(pathToFileURL(files[1].filename))['bom-ref']
+      assert.deepEqual(
+        inventory.resolve(`${pathToFileURL(alias).href}?alias=1`),
+        inventory.resolve(pathToFileURL(files[1].filename))
       );
       await fs.unlink(files[1].filename);
       inventory.worker.postMessage({ type: 'refresh' });
       const updated = await waitFor(
         events,
         event =>
-          event.event_name === 'beacon.security.sbom.snapshot' &&
-          event.reasons.includes('observed_file_unreadable')
+          event.event_name === 'beacon.security.sbom.inventory' &&
+          event.observed_at !== events[0].observed_at
       );
       assert.deepEqual(updated.dependencies, [
         { name: 'trusted-pkg', version: '2.0.0' },
@@ -307,7 +306,7 @@ test(
 );
 
 test(
-  'a snapshot that cannot fit its envelope does not commit a local revision',
+  'an inventory that exceeds its byte limit does not replace the last result',
   { concurrency: false },
   async () => {
     const { root } = await fixture();
@@ -322,19 +321,16 @@ test(
     );
     try {
       inventory.start();
-      await waitFor(
-        events,
-        event => event.event_name === 'beacon.security.sbom.update_failed'
+      const started = Date.now();
+      while (!inventory.lastFailure && Date.now() - started < 2500)
+        await new Promise(resolve => setTimeout(resolve, 10));
+      assert.equal(
+        inventory.lastFailure,
+        'dependency_snapshot_envelope_exceeds_budget'
       );
-      const health = await waitFor(
-        events,
-        event =>
-          event.event_name === 'beacon.security.sbom.health' &&
-          event.status === 'degraded'
-      );
-      assert.equal(health.revision, 0);
+      assert.deepEqual(events, []);
       await assert.rejects(
-        fs.readFile(path.join(output, 'application.cdx.json')),
+        fs.access(path.join(output, 'application.cdx.json')),
         { code: 'ENOENT' }
       );
     } finally {
@@ -345,134 +341,62 @@ test(
       if (previous === undefined)
         delete process.env.BEACON_SECURITY_EVIDENCE_MAX_BYTES;
       else process.env.BEACON_SECURITY_EVIDENCE_MAX_BYTES = previous;
+      await fs.rm(root, { recursive: true, force: true });
     }
   }
 );
 
 test(
-  'keeps unsupported package-manager state incomplete and resolves app roots from the published snapshot',
+  'unknown URLs stay unresolved while application roots use direct metadata',
   { concurrency: false },
   async () => {
     const { root, appFile } = await fixture();
-    await fs.writeFile(
-      path.join(root, 'pnpm-lock.yaml'),
-      'lockfileVersion: 9\n'
-    );
     const output = path.join(root, 'output');
     withEnvironment(root, output);
     const events = [];
     const inventory = new SbomInventory(
-      { application_id: 'app-pnpm' },
+      {
+        application_id: 'app-root',
+        service: { 'service.name': 'fixture-app' },
+      },
       output,
       event => events.push(event)
     );
     try {
       inventory.start();
-      const snapshot = await waitFor(
-        events,
-        event => event.event_name === 'beacon.security.sbom.snapshot'
-      );
-      assert.ok(snapshot.reasons.includes('pnpm_lock_unsupported'));
-      const appRootFile = path.join(root, 'startup-handler.mjs');
-      const resolvedAppRoot = inventory.resolve(
-        pathToFileURL(appRootFile).href
-      );
-      assert.equal(resolvedAppRoot.status, 'resolved');
-      assert.equal(resolvedAppRoot['bom-ref'], 'app-pnpm');
-      assert.equal(resolvedAppRoot.revision, snapshot.revision);
-      const outsideFile = path.join(
-        path.dirname(root),
-        'outside-sbom-file.mjs'
-      );
-      assert.equal(
-        inventory.resolve(pathToFileURL(outsideFile).href).status,
-        'unresolved'
-      );
-      inventory.observe('https://example.invalid/module.mjs');
-      assert.equal(
-        inventory.resolve('https://example.invalid/module.mjs').reason,
-        'unsupported_url_scheme'
-      );
-      inventory.observe(pathToFileURL(appFile));
       await waitFor(
         events,
-        event =>
-          event.event_name === 'beacon.security.sbom.snapshot' &&
-          event.revision > snapshot.revision
+        event => event.event_name === 'beacon.security.sbom.inventory'
+      );
+      assert.deepEqual(inventory.resolve(pathToFileURL(appFile)), {
+        name: 'fixture-app',
+        version: '',
+      });
+      assert.equal(
+        inventory.resolve('https://example.invalid/module.mjs'),
+        null
       );
       assert.equal(
-        inventory.resolve(pathToFileURL(appFile)).status,
-        'resolved'
+        inventory.resolve(
+          pathToFileURL(path.join(path.dirname(root), 'outside.mjs'))
+        ),
+        null
       );
     } finally {
       await inventory.close();
       delete process.env.BEACON_SECURITY_NODE_INCLUDE;
       delete process.env.BEACON_SECURITY_SBOM_OUTPUT;
       delete process.env.BEACON_SECURITY_SBOM_REFRESH_SECONDS;
+      await fs.rm(root, { recursive: true, force: true });
     }
   }
 );
 
 test(
-  'reports bounded observation loss without changing the last published revision',
+  'worker termination retains the last component map without a failure event',
   { concurrency: false },
   async () => {
-    const { root, appFile } = await fixture();
-    const output = path.join(root, 'output');
-    withEnvironment(root, output, { BEACON_SECURITY_SBOM_MAX_ENTRIES: '100' });
-    const events = [];
-    const inventory = new SbomInventory(
-      { application_id: 'app-queue' },
-      output,
-      event => events.push(event)
-    );
-    try {
-      inventory.start();
-      const first = await waitFor(
-        events,
-        event => event.event_name === 'beacon.security.sbom.snapshot'
-      );
-      const before = inventory.resolve(pathToFileURL(appFile).href);
-      assert.equal(before.revision, first.revision);
-
-      const appUrl = pathToFileURL(appFile).href;
-      for (let index = 0; index < 4096; index += 1)
-        inventory.observe(`${appUrl}?observation=${index}`);
-
-      const health = await waitFor(
-        events,
-        event =>
-          event.event_name === 'beacon.security.sbom.health' &&
-          event.dropped_observations > 0
-      );
-      assert.ok(health.dropped_observations > 0);
-      assert.ok(health.reasons.includes('observation_queue_full'));
-      const second = await waitFor(
-        events,
-        event =>
-          event.event_name === 'beacon.security.sbom.snapshot' &&
-          event.revision > first.revision
-      );
-      assert.equal(second.dropped_observations > 0, true);
-      const after = inventory.resolve(pathToFileURL(appFile).href);
-      assert.equal(before.revision, first.revision);
-      assert.equal(after.revision, second.revision);
-      assert.equal(after.status, 'resolved');
-    } finally {
-      await inventory.close();
-      delete process.env.BEACON_SECURITY_NODE_INCLUDE;
-      delete process.env.BEACON_SECURITY_SBOM_OUTPUT;
-      delete process.env.BEACON_SECURITY_SBOM_REFRESH_SECONDS;
-      delete process.env.BEACON_SECURITY_SBOM_MAX_ENTRIES;
-    }
-  }
-);
-
-test(
-  'worker termination emits one failure and keeps the last snapshot usable through close',
-  { concurrency: false },
-  async () => {
-    const { root, appFile } = await fixture();
+    const { root, packageFile } = await fixture();
     const output = path.join(root, 'output');
     withEnvironment(root, output);
     const events = [];
@@ -483,276 +407,25 @@ test(
     );
     try {
       inventory.start();
-      const snapshot = await waitFor(
-        events,
-        event => event.event_name === 'beacon.security.sbom.snapshot'
-      );
-      const before = inventory.resolve(pathToFileURL(appFile).href);
-      assert.equal(before.revision, snapshot.revision);
-      const worker = inventory.worker;
-      assert.ok(worker);
-      await worker.terminate();
+      inventory.observe(pathToFileURL(packageFile));
       await waitFor(
         events,
-        event => event.event_name === 'beacon.security.sbom.update_failed'
-      );
-      const health = await waitFor(
-        events,
         event =>
-          event.event_name === 'beacon.security.sbom.health' &&
-          event.status === 'degraded'
+          event.event_name === 'beacon.security.sbom.inventory' &&
+          event.dependencies.length === 1
       );
-      assert.equal(health.revision, snapshot.revision);
-      assert.deepEqual(inventory.resolve(pathToFileURL(appFile).href), before);
-      await inventory.close(100);
+      const before = inventory.resolve(pathToFileURL(packageFile));
+      assert.deepEqual(before, { name: 'trusted-pkg', version: '2.0.0' });
+      const count = events.length;
+      await inventory.worker.terminate();
       await new Promise(resolve => setTimeout(resolve, 30));
-      assert.equal(
-        events.filter(
-          event => event.event_name === 'beacon.security.sbom.update_failed'
-        ).length,
-        1
-      );
-      assert.equal(
-        events.filter(
-          event => event.event_name === 'beacon.security.sbom.snapshot'
-        ).length,
-        1
-      );
+      assert.equal(events.length, count);
+      assert.deepEqual(inventory.resolve(pathToFileURL(packageFile)), before);
     } finally {
       await inventory.close(100);
       delete process.env.BEACON_SECURITY_NODE_INCLUDE;
       delete process.env.BEACON_SECURITY_SBOM_OUTPUT;
       delete process.env.BEACON_SECURITY_SBOM_REFRESH_SECONDS;
-    }
-  }
-);
-
-test(
-  'healthy close settles after a published observation without a late failure',
-  { concurrency: false },
-  async () => {
-    const { root, appFile } = await fixture();
-    const output = path.join(root, 'output');
-    withEnvironment(root, output);
-    const events = [];
-    const inventory = new SbomInventory(
-      { application_id: 'app-healthy-close' },
-      output,
-      event => events.push(event)
-    );
-    try {
-      inventory.start();
-      const first = await waitFor(
-        events,
-        event => event.event_name === 'beacon.security.sbom.snapshot'
-      );
-      inventory.observe(`${pathToFileURL(appFile).href}?close=drain`);
-      const second = await waitFor(
-        events,
-        event =>
-          event.event_name === 'beacon.security.sbom.snapshot' &&
-          event.revision > first.revision
-      );
-      assert.equal(
-        inventory.resolve(pathToFileURL(appFile).href).revision,
-        second.revision
-      );
-      await inventory.close(1000);
-      await new Promise(resolve => setTimeout(resolve, 30));
-      assert.equal(inventory.worker, null);
-      assert.equal(
-        events.filter(
-          event => event.event_name === 'beacon.security.sbom.update_failed'
-        ).length,
-        0
-      );
-      assert.equal(
-        events.filter(
-          event => event.event_name === 'beacon.security.sbom.snapshot'
-        ).length,
-        2
-      );
-    } finally {
-      await inventory.close(100);
-      delete process.env.BEACON_SECURITY_NODE_INCLUDE;
-      delete process.env.BEACON_SECURITY_SBOM_OUTPUT;
-      delete process.env.BEACON_SECURITY_SBOM_REFRESH_SECONDS;
-    }
-  }
-);
-
-test(
-  'close publishes loader observations that are still waiting for the batch timer',
-  { concurrency: false },
-  async () => {
-    const { root } = await fixture();
-    const output = path.join(root, 'close-flush-output');
-    withEnvironment(root, output, {
-      BEACON_SECURITY_SBOM_REFRESH_SECONDS: '300',
-    });
-    const events = [];
-    const inventory = new SbomInventory(
-      { application_id: 'app-close-flush' },
-      output,
-      event => events.push(event)
-    );
-    try {
-      inventory.start();
-      const first = await waitFor(
-        events,
-        event => event.event_name === 'beacon.security.sbom.snapshot'
-      );
-      const lateRoot = path.join(root, 'node_modules', 'trusted-pkg');
-      const lateFile = path.join(lateRoot, 'index.mjs');
-      await fs.writeFile(lateFile, 'export default true;\n');
-
-      inventory.observe(`${pathToFileURL(lateFile).href}?shutdown=immediate`);
-      await inventory.close(2500);
-
-      const document = JSON.parse(
-        await fs.readFile(path.join(output, 'application.cdx.json'), 'utf8')
-      );
-      const component = document.components.find(
-        item => item.name === 'trusted-pkg' && item.version === '2.0.0'
-      );
-      assert.ok(component);
-      assert.equal(
-        component.properties.find(
-          item => item.name === 'beacon:security:sbom:loaded'
-        )?.value,
-        'true'
-      );
-      assert.ok(document.serialNumber);
-      assert.equal(document.version, first.revision + 1);
-      const resolved = inventory.resolve(pathToFileURL(lateFile));
-      assert.equal(resolved.status, 'resolved');
-      assert.equal(resolved['bom-ref'], component['bom-ref']);
-      assert.equal(resolved.revision, document.version);
-      assert.equal(
-        events.filter(
-          event => event.event_name === 'beacon.security.sbom.update_failed'
-        ).length,
-        0
-      );
-    } finally {
-      await inventory.close(100);
-      delete process.env.BEACON_SECURITY_NODE_INCLUDE;
-      delete process.env.BEACON_SECURITY_SBOM_OUTPUT;
-      delete process.env.BEACON_SECURITY_SBOM_REFRESH_SECONDS;
-      await fs.rm(root, { recursive: true, force: true });
-    }
-  }
-);
-
-test(
-  'history preserves unchanged entries and retries failed updates before removal and restoration',
-  { concurrency: false },
-  async () => {
-    const { root } = await fixture();
-    const output = path.join(root, 'history-output');
-    const build = path.join(root, 'build.cdx.json');
-    const first = {
-      type: 'library',
-      'bom-ref': 'first',
-      name: 'first',
-      version: '1',
-      licenses: [{ license: { name: 'MIT' } }],
-    };
-    const second = {
-      type: 'library',
-      'bom-ref': 'second',
-      name: 'second',
-      version: '1',
-    };
-    const write = components =>
-      fs.writeFile(
-        build,
-        JSON.stringify({
-          bomFormat: 'CycloneDX',
-          specVersion: '1.7',
-          components,
-        })
-      );
-    await write([first]);
-    withEnvironment(root, output, {
-      BEACON_SECURITY_SBOM_BUILD_FILE: build,
-      BEACON_SECURITY_SBOM_REFRESH_SECONDS: '300',
-    });
-    const events = [];
-    const inventory = new SbomInventory(
-      { application_id: 'history-test' },
-      output,
-      event => events.push(event)
-    );
-    const history = async () =>
-      JSON.parse(
-        await fs.readFile(path.join(output, 'sbom-history.json'), 'utf8')
-      );
-    const document = async () =>
-      JSON.parse(
-        await fs.readFile(path.join(output, 'application.cdx.json'), 'utf8')
-      );
-    const entry = (value, ref) =>
-      value.entries.find(row => row['bom-ref'] === ref);
-    const refresh = async () => {
-      events.length = 0;
-      inventory.worker.postMessage({ type: 'refresh' });
-      return waitFor(
-        events,
-        event => event.event_name === 'beacon.security.sbom.health'
-      );
-    };
-    try {
-      inventory.start();
-      await waitFor(
-        events,
-        event => event.event_name === 'beacon.security.sbom.snapshot'
-      );
-      const ref = (await document()).components.find(
-        row => row.name === 'first'
-      )['bom-ref'];
-      const initial = entry(await history(), ref);
-      assert.equal((await refresh()).revision, 1);
-      await write([first, second]);
-      assert.equal((await refresh()).revision, 2);
-      assert.deepEqual(entry(await history(), ref), initial);
-      first.licenses = [{ license: { name: 'Apache-2.0' } }];
-      await write([first, second]);
-      const previous = await history();
-      await fs.rename(output, output + '-saved');
-      await fs.writeFile(output, 'blocked directory');
-      assert.equal((await refresh()).revision, 2);
-      assert.ok(
-        events.some(
-          event => event.event_name === 'beacon.security.sbom.update_failed'
-        )
-      );
-      await fs.unlink(output);
-      await fs.rename(output + '-saved', output);
-      assert.deepEqual(await history(), previous);
-      assert.equal((await refresh()).revision, 3);
-      assert.deepEqual(
-        (await document()).components.find(row => row.name === 'first')
-          .licenses,
-        first.licenses
-      );
-      await write([second]);
-      assert.equal((await refresh()).revision, 4);
-      assert.equal(entry(await history(), ref).state, 'removed');
-      await write([first, second]);
-      assert.equal((await refresh()).revision, 5);
-      const restored = entry(await history(), ref);
-      assert.equal(restored.state, 'current');
-      assert.equal(restored.first_seen, initial.first_seen);
-    } finally {
-      await inventory.close();
-      for (const key of [
-        'BEACON_SECURITY_NODE_INCLUDE',
-        'BEACON_SECURITY_SBOM_OUTPUT',
-        'BEACON_SECURITY_SBOM_REFRESH_SECONDS',
-        'BEACON_SECURITY_SBOM_BUILD_FILE',
-      ])
-        delete process.env[key];
       await fs.rm(root, { recursive: true, force: true });
     }
   }

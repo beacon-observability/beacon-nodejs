@@ -1,0 +1,10 @@
+{
+  "name": "beacon-nodejs-image",
+  "version": "1.3.1",
+  "private": true,
+  "dependencies": {
+    "@beacon-observability/nodejs": "1.3.1",
+    "@beacon-observability/profiler-nodejs": "1.3.1",
+    "@beacon-observability/security-nodejs": "1.3.1"
+  }
+}
