@@ -18,6 +18,13 @@ the exact adopted OpenTelemetry commit is recorded in
   those two event families exported. Keep fingerprint v1 and bounded delivery.
 - Make the successful inventory interval 300 seconds by default, omit failed
   replacement events, and remove online SBOM revisions and local history.
+- Adopt the released OpenTelemetry JavaScript Contrib source commit
+  `207b9dd1c7e30c12d5dec0e54e476e361b209484` while preserving upstream
+  history and Beacon package ownership.
+- Adjust Beacon compilation for the upstream TypeScript configuration and
+  isolate Beacon package tests from upstream-only Mocha hooks. Build inherited
+  packages with Node.js 24 and reinstall native dependencies before testing
+  each supported runtime.
 
 ## 1.3.1 - 2026-10-22
 

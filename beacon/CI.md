@@ -18,6 +18,14 @@ the complete upstream instrumentation, browser, service-integration, or
 all-versions matrices and does not establish production support for every
 runtime in the matrix.
 
+Upstream build tools run on Node.js 24. Each matrix job then selects its declared
+Node.js runtime before running Beacon tests. Jobs switching runtime reinstall the
+locked dependencies with `npm ci` so native modules use the test runtime ABI.
+
+Beacon-owned Mocha packages select their explicit ts-node runner and retain all
+test files, coverage, and the 10-second timeout. They bypass the inherited global
+Mocha config, whose upstream resolution hook requires Node.js 22 or newer.
+
 ## Inherited Workflow Isolation
 
 All inherited OpenTelemetry workflows are disabled in the Beacon GitHub
