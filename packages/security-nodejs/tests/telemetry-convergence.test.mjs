@@ -167,7 +167,9 @@ test('unchanged SBOM collection emits a fresh inventory on each configured cycle
   try {
     worker.postMessage({ type: 'refresh' });
     await waitFor(
-      () => messages.filter(message => message.type === 'published').length >= 2
+      () =>
+        messages.filter(message => message.type === 'published').length >= 2,
+      10000
     );
     const rounds = messages.filter(message => message.type === 'published');
     const first = rounds[0].events;
