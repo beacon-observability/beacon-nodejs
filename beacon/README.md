@@ -7,17 +7,16 @@ cross-language documentation entry point is
 
 ## Status
 
-The current public stable release is Beacon Node.js `1.3.1`, with
-preload/profiler lifecycle fixes and bounded workspace SBOM improvements.
-It provides the
+The current public stable release is Beacon Node.js `2.0.0`, with
+Security event schema v2 and the adopted OpenTelemetry JavaScript Contrib source
+commit `207b9dd1c7e30c12d5dec0e54e476e361b209484`. It provides the
 `@beacon-observability/nodejs` zero-code package and the matching
 `@beacon-observability/profiler-nodejs` and
 `@beacon-observability/security-nodejs` components. The public npm artifacts
 and GitHub Release passed the acceptance recorded in
-[the 1.3.1 validation record](validation/1.3.1.md). The repository is based on
-the official upstream `main` commit recorded when the project was established.
-That exact commit, rather than the moving branch name, is the reproducible
-baseline.
+[the 2.0.0 validation record](validation/2.0.0.md). The adopted upstream
+baseline is pinned in [upstream.lock.json](upstream.lock.json) as an exact
+commit.
 
 The dedicated Beacon checks target Node.js 18.19, 20, 22, and 24. The complete
 upstream matrix and receiver compatibility matrix have not been run. Only the
@@ -48,6 +47,7 @@ inherited upstream packages retain their own publication lifecycle.
 - [Product version](version.properties)
 - [Release prerequisites](RELEASING.md)
 - [Container distribution and Kubernetes injection](docker/nodejs/README.md)
+- [Beacon Node.js 2.0.0 release acceptance](validation/2.0.0.md)
 - [Beacon Node.js 1.3.1 release acceptance](validation/1.3.1.md)
 - [Beacon Node.js 1.3.0 release acceptance](validation/1.3.0.md)
 - [Beacon Node.js package documentation](../packages/nodejs/README.md)
@@ -71,7 +71,7 @@ The Beacon-owned `@beacon-observability/nodejs` package:
 The Beacon Security workspace:
 
 - follows the pinned Beacon Security schema v2 and fingerprint v1 contract in
-  the unreleased source; the public 1.3.1 packages retain schema v1;
+  the public 2.0.0 packages; the previous 1.3.1 packages use schema v1;
 - models bounded flows from selected HTTP inputs to SQL, command, outbound
   HTTP, and file sinks;
 - publishes request findings and periodic runtime dependency inventories through
