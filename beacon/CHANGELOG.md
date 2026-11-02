@@ -7,6 +7,12 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+## 2.0.1 - 2026-11-02
+
+- Exclude `no_evidence` Security findings from event export by default. Set
+  `BEACON_SECURITY_EXPORT_NO_EVIDENCE_ENABLED=true` to restore their export;
+  retain `unknown`, `suspected`, and request-level evidence upgrades.
+
 - Add a separate, manually approved GHCR distribution workflow for the published
   Node.js packages, locked production dependencies, and a pinned Node.js 24 glibc
   runtime. Test native amd64/arm64 images and isolated Kubernetes injection.
