@@ -192,6 +192,12 @@ export class Exporter {
     const contextEvent = eventRecord(copy(event), this.identity);
     const value = onlineEvent(contextEvent);
     if (!value) return false;
+    if (
+      value.event_name === 'beacon.security.finding' &&
+      value.attack_evidence.status === 'no_evidence' &&
+      !flag('beacon.security.export.no-evidence.enabled', false)
+    )
+      return false;
     const channel =
       value.event_name === 'beacon.security.sbom.inventory' ||
       asText(value.event_name).startsWith('beacon.security.sbom.')

@@ -13,6 +13,7 @@ import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 
+process.env.BEACON_SECURITY_EXPORT_NO_EVIDENCE_ENABLED = 'true';
 process.env.BEACON_SECURITY_ENABLED = 'true';
 process.env.BEACON_SECURITY_NODE_INCLUDE = process.cwd();
 process.env.BEACON_SECURITY_LOCAL_OUTPUT_ENABLED = 'false';
