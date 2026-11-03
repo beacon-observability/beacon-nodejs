@@ -17,7 +17,9 @@ const json = path => JSON.parse(readFileSync(path, 'utf8'));
 assert(version, 'Usage: node smoke.mjs <bundle-directory> <version>');
 assert.equal(process.getuid(), 65532);
 assert.equal(process.versions.node.split('.')[0], '24');
-const manifest = json(join(bundle, 'metadata/release/release-manifest.json'));
+const manifest = json(
+  join(bundle, 'metadata/release/distribution-manifest.json')
+);
 const provenance = json(join(bundle, 'metadata/provenance.json'));
 assert.equal(provenance.version, version);
 assert.equal(

@@ -16,7 +16,7 @@ spec:
         fsGroup: 65532
       initContainers:
         - name: beacon-nodejs
-          image: ghcr.io/beacon-observability/beacon-nodejs:1.3.1
+          image: ghcr.io/beacon-observability/beacon-nodejs:2.0.1
           command: [sh, -ec, 'cp -R /opt/beacon-nodejs/. /beacon/']
           securityContext:
             runAsNonRoot: true

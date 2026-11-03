@@ -5,7 +5,7 @@ dependencies on a pinned Node.js 24 / Debian bookworm glibc runtime. It contains
 Security and Profiling remain disabled unless explicitly enabled. It does not publish a new npm
 package or rebuild the released Beacon JavaScript files.
 
-The image is `ghcr.io/beacon-observability/beacon-nodejs:1.3.1`. Only the product version is tagged:
+The image is `ghcr.io/beacon-observability/beacon-nodejs:2.0.1`. Only the product version is tagged:
 no `v`, runtime, architecture or packaging suffix, and no `latest` tag. Linux amd64 and arm64 share
 one manifest list. A version tag must never be overwritten; pin the manifest digest in production.
 
@@ -25,7 +25,7 @@ application rather than automatically applying to every command in the image.
 ## Application image
 
 ```dockerfile
-FROM ghcr.io/beacon-observability/beacon-nodejs:1.3.1 AS beacon
+FROM ghcr.io/beacon-observability/beacon-nodejs:2.0.1 AS beacon
 FROM node:24-bookworm-slim
 WORKDIR /srv/app
 COPY --from=beacon /opt/beacon-nodejs /opt/beacon-nodejs
@@ -53,18 +53,33 @@ cluster-wide installation or OpenTelemetry Operator compatibility is claimed.
 This is a separate manual distribution workflow after the stable npm and GitHub Release have
 been accepted. Ordinary package builds do not publish a container image.
 
-1. Update this directory's `package.json` to pin all three released Beacon packages to the same
-   version and generate its production `package-lock.json` from the public npm registry. Commit and
-   review that dependency lock before publication; do not silently re-resolve dependencies in CI.
-2. Run **Beacon Node.js image** from `main` with the matching `X.Y.Z` input. Preparation verifies the
-   stable source tag, all three public npm identities/integrities and the GitHub Release tarballs.
-3. Native amd64 and arm64 candidates install the committed lock with dependency scripts disabled,
-   then verify CommonJS and ESM preload, correlated OTLP traces, disabled optional features, native
-   multipart profiles and opt-in Security SBOM delivery with non-root, read-only containers.
-4. Approve the `beacon-release` environment. The publish job promotes those tested archives without
-   rebuilding, rejects an existing version tag and publishes the single multi-platform tag.
-5. The package administrator sets the package Public on first publication. Verify anonymous pulling
-   and run the Kubernetes acceptance against the published digest. Future versions retain visibility.
+1. Run **Beacon Node.js image** from `main` with the existing stable `X.Y.Z` input.
+   No source files, dependency locks, workflow defaults, or examples need updating
+   for a routine version release.
+2. One preparation job verifies the source tag, public npm identities/integrities
+   and GitHub Release tarballs. It generates the three exact package pins and one
+   production `package-lock.json`, then archives the Dockerfile and build context.
+3. Native amd64 and arm64 candidates consume the same checksummed snapshot with
+   dependency scripts disabled. They verify CommonJS/ESM preload, correlated OTLP
+   traces, disabled optional features, native multipart profiles and opt-in
+   Security SBOM delivery with non-root, read-only containers.
+4. Review the snapshot and results, then approve the `beacon-release` environment.
+   The publish job promotes those tested archives without rebuilding, rejects an
+   existing version tag and publishes the single multi-platform tag.
+5. On first publication, the package administrator sets the package Public. Verify
+   anonymous pulling and Kubernetes acceptance against the published digest.
+
+The preparation job's build-context artifact is retained for 90 days, including
+its SHA-256 checksum, generated dependency lock, original public Beacon packages,
+Dockerfile and provenance. Rerunning failed candidate jobs uses that artifact;
+rerunning all jobs also reuses an existing unexpired snapshot from the same run.
+A new workflow run resolves a new snapshot, so specifying the same product version
+alone does not promise identical transitive dependencies. For a later rebuild,
+download and verify the retained snapshot instead of resolving again. The final
+image also preserves the dependency lock and public Beacon artifacts. PR smoke
+versions and installation examples are fixed fixtures, not a moving release selector.
+Change the image implementation through PRs when packaging, runtime or validation
+needs change.
 
 PRs changing the image implementation also build/test both architectures; they never publish.
 Publication uses `GITHUB_TOKEN` with package write permission and does not need an npm publish token.
@@ -74,19 +89,19 @@ version tag must be verified or rolled back by digest, never overwritten.
 Local build (Node.js, npm, GitHub CLI, Docker required):
 
 ```bash
-node beacon/docker/nodejs/prepare.mjs 1.3.1 /tmp/beacon-nodejs-release
+node beacon/docker/nodejs/prepare.mjs 2.0.1 /tmp/beacon-nodejs-release
 source=$(node -p 'require("/tmp/beacon-nodejs-release/provenance.json").source_commit')
-docker buildx build --load -f beacon/docker/nodejs/Dockerfile \
-  --build-arg BEACON_VERSION=1.3.1 --build-arg "BEACON_SOURCE_REVISION=$source" \
+docker buildx build --load -f /tmp/beacon-nodejs-release/Dockerfile \
+  --build-arg BEACON_VERSION=2.0.1 --build-arg "BEACON_SOURCE_REVISION=$source" \
   -t beacon-nodejs-candidate /tmp/beacon-nodejs-release
-bash beacon/docker/nodejs/verify-image.sh beacon-nodejs-candidate 1.3.1
+bash beacon/docker/nodejs/verify-image.sh beacon-nodejs-candidate 2.0.1
 ```
 
 The staging directory must be empty. For isolated cluster acceptance:
 
 ```bash
 node beacon/docker/nodejs/kubernetes-smoke.mjs \
-  YOUR_TEST_CONTEXT ghcr.io/beacon-observability/beacon-nodejs@sha256:REPLACE_ME 1.3.1
+  YOUR_TEST_CONTEXT ghcr.io/beacon-observability/beacon-nodejs@sha256:REPLACE_ME 2.0.1
 ```
 
 The script creates a unique temporary namespace, tests initContainer injection and actual local

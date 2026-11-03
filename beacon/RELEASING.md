@@ -71,10 +71,12 @@ commits.
 
 ## Container distribution
 
-After stable npm and GitHub Release acceptance, use the separate
-[container distribution workflow](docker/nodejs/README.md#build-and-publish).
-Commit the exact three-package versions and production dependency lock first.
-The manually dispatched workflow validates the released artifacts, tests native
-amd64/arm64 candidates and promotes their archives through the `beacon-release`
-environment. It does not rebuild or republish the npm packages. Image tags use
-only the language product version and cannot be overwritten.
+After stable public-package and GitHub Release acceptance, manually run the
+[container distribution workflow](docker/nodejs/README.md#build-and-publish)
+from `main` with the existing product version. Routine image releases need no
+source changes or version-bump PR. One preparation job verifies the public
+artifacts and generates a shared dependency lock; native amd64/arm64 jobs consume
+that exact snapshot. The protected `beacon-release` job promotes the tested image
+archives without rebuilding or republishing packages. Version tags cannot be
+overwritten. Dependency locks and provenance are retained in the images; the
+checksummed build-context artifact is retained for 90 days and reused on reruns.
