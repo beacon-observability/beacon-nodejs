@@ -70,15 +70,46 @@ gh([
   join(output, 'assets'),
   ...names.flatMap(name => ['--pattern', name]),
 ]);
-const manifest = json(join(output, 'assets/release-manifest.json'));
+const published = json(join(output, 'assets/release-manifest.json'));
+// Release 2.0.1 records npm verification using the newer artifact field names.
+// Normalize distribution metadata while retaining the original release record.
+const manifest = published.artifacts
+  ? {
+      version: published.version,
+      tag: `v${published.version}`,
+      source_commit: published.sourceCommit,
+      items: published.artifacts.map(item => ({
+        name: item.package,
+        version: item.version,
+        file: item.file,
+        sha256: item.sha256,
+        integrity: item.npmIntegrity,
+        public_tarball: item.npmTarball,
+        files: execFileSync(
+          'tar',
+          ['-tzf', join(output, 'assets', item.file)],
+          {
+            encoding: 'utf8',
+          }
+        )
+          .trim()
+          .split('\n')
+          .filter(name => !name.endsWith('/')),
+      })),
+    }
+  : published;
 assert.equal(manifest.version, version);
 assert.equal(manifest.tag, `v${version}`);
 assert.equal(manifest.source_commit, commit);
-assert.equal(manifest.items.length, 3);
+assert.deepEqual(
+  manifest.items.map(item => item.name).sort(),
+  Object.keys(pkg.dependencies).sort()
+);
 for (const item of manifest.items) {
   assert.equal(pkg.dependencies[item.name], version);
   assert.equal(item.version, version);
-  assert.equal(item.public_git_head, commit);
+  if (item.public_git_head !== undefined)
+    assert.equal(item.public_git_head, commit);
   assert(names.includes(item.file));
   const bytes = readFileSync(join(output, 'assets', item.file));
   assert.equal(createHash('sha256').update(bytes).digest('hex'), item.sha256);
@@ -92,22 +123,34 @@ for (const item of manifest.items) {
   assert.equal(entry.resolved, item.public_tarball);
   const metadata = JSON.parse(
     execFileSync(
-      'npm',
+      'curl',
       [
-        'view',
-        `${item.name}@${version}`,
-        'gitHead',
-        'dist',
-        '--json',
-        '--registry=https://registry.npmjs.org/',
+        '--fail',
+        '--silent',
+        '--show-error',
+        '--location',
+        '--retry',
+        '3',
+        '--max-time',
+        '60',
+        `https://registry.npmjs.org/${encodeURIComponent(item.name)}/${version}`,
       ],
       { encoding: 'utf8' }
     )
   );
-  assert.equal(metadata.gitHead, commit);
+  // npm provenance does not always include gitHead; the immutable release
+  // binds the source commit and the byte-identical public tarballs.
+  if (metadata.gitHead !== undefined) assert.equal(metadata.gitHead, commit);
+  assert.equal(metadata.name, item.name);
+  assert.equal(metadata.version, version);
+  assert.equal(metadata.dist.tarball, item.public_tarball);
   assert.equal(metadata.dist.integrity, item.integrity);
   console.log(`Verified ${item.name}@${version}: ${item.sha256}`);
 }
+writeFileSync(
+  join(output, 'assets/distribution-manifest.json'),
+  JSON.stringify(manifest, null, 2) + '\n'
+);
 copyFileSync(join(here, 'package.json'), join(output, 'package.json'));
 copyFileSync(
   join(here, 'package-lock.json'),

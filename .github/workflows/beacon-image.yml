@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           # A fixed public release exercises packaging changes before they reach main.
-          VERSION: ${{ inputs.version || '1.3.1' }}
+          VERSION: ${{ inputs.version || '2.0.1' }}
         run: node beacon/docker/nodejs/prepare.mjs "$VERSION" release-image
       - name: Install image archive tools
         run: |
@@ -52,7 +52,7 @@ jobs:
           sudo apt-get install --yes skopeo
       - name: Build and test the native candidate once
         env:
-          VERSION: ${{ inputs.version || '1.3.1' }}
+          VERSION: ${{ inputs.version || '2.0.1' }}
           ARCH: ${{ matrix.arch }}
         run: |
           source=$(jq -r .source_commit release-image/provenance.json)
