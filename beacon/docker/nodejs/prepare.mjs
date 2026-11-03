@@ -19,27 +19,17 @@ const output = resolve(target);
 mkdirSync(output, { recursive: true });
 assert.equal(readdirSync(output).length, 0, 'Staging directory must be empty');
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
-const pkg = json(join(here, 'package.json'));
-const lock = json(join(here, 'package-lock.json'));
-assert.equal(
-  pkg.version,
+const pkg = {
+  name: 'beacon-nodejs-image',
   version,
-  'Commit the image dependency lock for this release first'
-);
-assert.equal(lock.version, version);
-assert.deepEqual(lock.packages[''].dependencies, pkg.dependencies);
-for (const [name, entry] of Object.entries(lock.packages)) {
-  if (!name) continue;
-  assert(
-    entry.resolved?.startsWith('https://registry.npmjs.org/'),
-    `Non-registry dependency: ${name}`
-  );
-  assert.match(entry.integrity || '', /^sha512-/);
-  assert(
-    !entry.link && !entry.dev,
-    `Unexpected workspace/dev dependency: ${name}`
-  );
-}
+  private: true,
+  dependencies: Object.fromEntries(
+    ['nodejs', 'profiler-nodejs', 'security-nodejs'].map(name => [
+      `@beacon-observability/${name}`,
+      version,
+    ])
+  ),
+};
 const gh = args => execFileSync('gh', args, { encoding: 'utf8' });
 const repo = 'beacon-observability/beacon-nodejs';
 const release = JSON.parse(
@@ -117,10 +107,6 @@ for (const item of manifest.items) {
     `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
     item.integrity
   );
-  const entry = lock.packages[`node_modules/${item.name}`];
-  assert.equal(entry.version, version);
-  assert.equal(entry.integrity, item.integrity);
-  assert.equal(entry.resolved, item.public_tarball);
   const metadata = JSON.parse(
     execFileSync(
       'curl',
@@ -151,11 +137,46 @@ writeFileSync(
   join(output, 'assets/distribution-manifest.json'),
   JSON.stringify(manifest, null, 2) + '\n'
 );
-copyFileSync(join(here, 'package.json'), join(output, 'package.json'));
-copyFileSync(
-  join(here, 'package-lock.json'),
-  join(output, 'package-lock.json')
+writeFileSync(
+  join(output, 'package.json'),
+  JSON.stringify(pkg, null, 2) + '\n'
 );
+execFileSync(
+  'npm',
+  [
+    'install',
+    '--package-lock-only',
+    '--ignore-scripts',
+    '--omit=dev',
+    '--no-audit',
+    '--no-fund',
+    '--workspaces=false',
+    '--registry=https://registry.npmjs.org/',
+  ],
+  { cwd: output, stdio: 'inherit' }
+);
+const lock = json(join(output, 'package-lock.json'));
+assert.equal(lock.version, version);
+assert.deepEqual(lock.packages[''].dependencies, pkg.dependencies);
+for (const [name, entry] of Object.entries(lock.packages)) {
+  if (!name) continue;
+  assert(
+    entry.resolved?.startsWith('https://registry.npmjs.org/'),
+    `Non-registry dependency: ${name}`
+  );
+  assert.match(entry.integrity || '', /^sha512-/);
+  assert(
+    !entry.link && !entry.dev,
+    `Unexpected workspace/dev dependency: ${name}`
+  );
+}
+for (const item of manifest.items) {
+  const entry = lock.packages[`node_modules/${item.name}`];
+  assert.equal(entry.version, version);
+  assert.equal(entry.integrity, item.integrity);
+  assert.equal(entry.resolved, item.public_tarball);
+}
+copyFileSync(join(here, 'Dockerfile'), join(output, 'Dockerfile'));
 writeFileSync(
   join(output, 'provenance.json'),
   JSON.stringify(
@@ -163,9 +184,12 @@ writeFileSync(
       version,
       source_commit: commit,
       dependency_lock_sha256: createHash('sha256')
-        .update(readFileSync(join(here, 'package-lock.json')))
+        .update(readFileSync(join(output, 'package-lock.json')))
         .digest('hex'),
       runtime: 'Node.js 24 / Debian bookworm glibc',
+      npm_version: execFileSync('npm', ['--version'], {
+        encoding: 'utf8',
+      }).trim(),
       release: release.html_url,
     },
     null,
