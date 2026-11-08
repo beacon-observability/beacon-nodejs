@@ -7,6 +7,8 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+- Adopted the verified OpenTelemetry source snapshot `845a18b54995d388e752`; Beacon product version remains unchanged.
+
 ## 2.0.1 - 2026-11-02
 
 - Exclude `no_evidence` Security findings from event export by default. Set
