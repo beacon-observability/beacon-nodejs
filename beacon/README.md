@@ -7,16 +7,14 @@ cross-language documentation entry point is
 
 ## Status
 
-The current public stable release is Beacon Node.js `2.0.0`, with
-Security event schema v2 and the adopted OpenTelemetry JavaScript Contrib source
-commit `207b9dd1c7e30c12d5dec0e54e476e361b209484`. It provides the
-`@beacon-observability/nodejs` zero-code package and the matching
-`@beacon-observability/profiler-nodejs` and
-`@beacon-observability/security-nodejs` components. The public npm artifacts
-and GitHub Release passed the acceptance recorded in
-[the 2.0.0 validation record](validation/2.0.0.md). The adopted upstream
-baseline is pinned in [upstream.lock.json](upstream.lock.json) as an exact
-commit.
+The Beacon product version in this source tree is `2.0.2`. Its adopted
+OpenTelemetry JavaScript Contrib commit is
+`fc3b13eb41e9512fb0d769b431583f90b5ef8326`; the exact baseline is recorded in
+[upstream.lock.json](upstream.lock.json). It provides the three Beacon-owned
+Node.js, profiling and Security packages. See the
+[2.0.2 release notes](releases/2.0.2.md) for the source/dependency boundary and
+the GitHub Release for publication receipts. Previous release acceptance is
+retained in [the 2.0.0 validation record](validation/2.0.0.md).
 
 The dedicated Beacon checks target Node.js 18.19, 20, 22, and 24. The complete
 upstream matrix and receiver compatibility matrix have not been run. Only the

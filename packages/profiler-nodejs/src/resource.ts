@@ -27,7 +27,7 @@ import {
 import type { NodeProfilingOptions } from './types';
 
 const DEFAULT_SERVICE_NAME = 'unknown_service:node';
-const PROFILER_VERSION = '2.0.1';
+const PROFILER_VERSION = '2.0.2';
 const RUNTIME_ID = randomUUID().replace(/-/g, '');
 
 export function buildProfilerTags(

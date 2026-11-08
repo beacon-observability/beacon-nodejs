@@ -5,7 +5,7 @@ dependencies on a pinned Node.js 24 / Debian bookworm glibc runtime. It contains
 Security and Profiling remain disabled unless explicitly enabled. It does not publish a new npm
 package or rebuild the released Beacon JavaScript files.
 
-The image is `ghcr.io/beacon-observability/beacon-nodejs:2.0.1`. Only the product version is tagged:
+The image is `ghcr.io/beacon-observability/beacon-nodejs:2.0.2`. Only the product version is tagged:
 no `v`, runtime, architecture or packaging suffix, and no `latest` tag. Linux amd64 and arm64 share
 one manifest list. A version tag must never be overwritten; pin the manifest digest in production.
 
@@ -25,7 +25,7 @@ application rather than automatically applying to every command in the image.
 ## Application image
 
 ```dockerfile
-FROM ghcr.io/beacon-observability/beacon-nodejs:2.0.1 AS beacon
+FROM ghcr.io/beacon-observability/beacon-nodejs:2.0.2 AS beacon
 FROM node:24-bookworm-slim
 WORKDIR /srv/app
 COPY --from=beacon /opt/beacon-nodejs /opt/beacon-nodejs
@@ -89,19 +89,19 @@ version tag must be verified or rolled back by digest, never overwritten.
 Local build (Node.js, npm, GitHub CLI, Docker required):
 
 ```bash
-node beacon/docker/nodejs/prepare.mjs 2.0.1 /tmp/beacon-nodejs-release
+node beacon/docker/nodejs/prepare.mjs 2.0.2 /tmp/beacon-nodejs-release
 source=$(node -p 'require("/tmp/beacon-nodejs-release/provenance.json").source_commit')
 docker buildx build --load -f /tmp/beacon-nodejs-release/Dockerfile \
-  --build-arg BEACON_VERSION=2.0.1 --build-arg "BEACON_SOURCE_REVISION=$source" \
+  --build-arg BEACON_VERSION=2.0.2 --build-arg "BEACON_SOURCE_REVISION=$source" \
   -t beacon-nodejs-candidate /tmp/beacon-nodejs-release
-bash beacon/docker/nodejs/verify-image.sh beacon-nodejs-candidate 2.0.1
+bash beacon/docker/nodejs/verify-image.sh beacon-nodejs-candidate 2.0.2
 ```
 
 The staging directory must be empty. For isolated cluster acceptance:
 
 ```bash
 node beacon/docker/nodejs/kubernetes-smoke.mjs \
-  YOUR_TEST_CONTEXT ghcr.io/beacon-observability/beacon-nodejs@sha256:REPLACE_ME 2.0.1
+  YOUR_TEST_CONTEXT ghcr.io/beacon-observability/beacon-nodejs@sha256:REPLACE_ME 2.0.2
 ```
 
 The script creates a unique temporary namespace, tests initContainer injection and actual local
