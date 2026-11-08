@@ -40,7 +40,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           # A fixed acceptance fixture; normal releases only supply the input.
-          VERSION: ${{ inputs.version || '2.0.2' }}
+          VERSION: ${{ inputs.version || '2.0.1' }}
         shell: bash
         run: |
           [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
