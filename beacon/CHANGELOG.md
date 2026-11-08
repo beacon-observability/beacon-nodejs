@@ -5,9 +5,16 @@ This file records Beacon product changes. The root
 the exact adopted OpenTelemetry commit is recorded in
 [`upstream.lock.json`](upstream.lock.json).
 
-## Unreleased
+## 2.0.2 - 2026-11-08
 
-- Adopted the verified OpenTelemetry source snapshot `845a18b54995d388e752`; Beacon product version remains unchanged.
+- Adopt the released OpenTelemetry JavaScript Contrib source commit
+  `fc3b13eb41e9512fb0d769b431583f90b5ef8326` and retain its complete history.
+- Keep the customer package on its existing auto-instrumentation 0.80.x and
+  Core 2.x dependency ranges. The inherited source workspace's Core 3 migration
+  does not change the product's Node.js 18.19+/20.6+ support declaration.
+- Align the three Beacon packages and their telemetry version identities at
+  2.0.2. Security retains schema v2, fingerprint v1 and its narrower runtime
+  support requirements.
 
 ## 2.0.1 - 2026-11-02
 

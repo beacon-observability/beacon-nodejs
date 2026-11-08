@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMainThread } from 'node:worker_threads';
 
-export const VERSION = '2.0.1';
+export const VERSION = '2.0.2';
 export const RULES = Object.freeze([
   'sql_injection',
   'command_execution',
