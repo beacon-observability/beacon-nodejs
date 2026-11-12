@@ -1,7 +1,7 @@
 {
   "name": "@beacon-observability/profiler-nodejs",
   "version": "2.0.2",
-  "description": "Node.js profiling bridge for OpenTelemetry resource metadata and pprof export",
+  "description": "Node.js profiling bridge for OTLP Profiles and local pprof export",
   "main": "build/src/index.js",
   "types": "build/src/index.d.ts",
   "repository": {
@@ -36,7 +36,8 @@
   "files": [
     "build/src/**/*.js",
     "build/src/**/*.js.map",
-    "build/src/**/*.d.ts"
+    "build/src/**/*.d.ts",
+    "proto/**/*.proto"
   ],
   "peerDependencies": {
     "@opentelemetry/api": "^1.3.0"
@@ -49,7 +50,9 @@
     "@datadog/pprof": "^5.14.1",
     "@opentelemetry/resources": "^2.2.0",
     "@opentelemetry/semantic-conventions": "^1.37.0",
-    "pprof-format": "^1.0.0"
+    "pprof-format": "^1.0.0",
+    "protobufjs": "^7.5.5",
+    "@grpc/grpc-js": "^1.14.7"
   },
   "homepage": "https://github.com/beacon-observability/beacon-nodejs/tree/main/packages/profiler-nodejs#readme"
 }

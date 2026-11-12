@@ -65,7 +65,7 @@ const receiver = http.createServer((request, response) => {
       body: Buffer.concat(chunks),
     });
     response.writeHead(200, { 'content-type': 'application/json' });
-    response.end('{}');
+    response.end(request.url === '/v1development/profiles' ? '' : '{}');
   });
 });
 await new Promise(resolve => receiver.listen(0, '127.0.0.1', resolve));
@@ -94,7 +94,8 @@ try {
         OTEL_BLRP_SCHEDULE_DELAY: '100',
         OTEL_PROFILING_ENABLED: String(esm),
         OTEL_PROFILING_EXPORT_INTERVAL: '1',
-        OTEL_PROFILING_PPROF_UPLOAD_URL: `${endpoint}/profiles`,
+        OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: `${endpoint}/v1development/profiles`,
+        OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL: 'http/protobuf',
         BEACON_SECURITY_ENABLED: String(esm),
         BEACON_SECURITY_NODE_INCLUDE: here,
         BEACON_SECURITY_LOCAL_OUTPUT_ENABLED: 'false',
@@ -148,14 +149,15 @@ try {
       ),
       'Expected propagated parent span'
     );
-    const profiles = received.filter(item => item.path === '/profiles');
+    const profiles = received.filter(
+      item => item.path === '/v1development/profiles'
+    );
     const logs = received.filter(item => item.path === '/v1/logs');
     if (esm) {
       assert(
         profiles.some(
           item =>
-            item.contentType.includes('multipart/form-data') &&
-            item.body.includes(Buffer.from('wall.pprof')) &&
+            item.contentType === 'application/x-protobuf' &&
             item.body.includes(Buffer.from('beacon-nodejs-image-smoke'))
         ),
         `No native profile: ${output}`

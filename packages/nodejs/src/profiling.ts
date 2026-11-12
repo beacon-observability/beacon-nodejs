@@ -5,12 +5,13 @@
 
 import { diag } from '@opentelemetry/api';
 import type {
-  HttpProfilingExporter,
+  ProfileExporter,
   NodeProfiling,
 } from '@beacon-observability/profiler-nodejs';
 import type {
-  HttpProfilingExporterOptions,
+  OtlpProfilingExporterOptions,
   NodeProfilingOptions,
+  FileProfilingExporterOptions,
 } from '@beacon-observability/profiler-nodejs';
 
 const DEFAULT_EXPORT_INTERVAL_SECONDS = 60;
@@ -20,15 +21,21 @@ interface ProfilingEnvironment {
 }
 
 interface ProfilingDependencies {
-  createExporter(options: HttpProfilingExporterOptions): HttpProfilingExporter;
+  createExporter(options: OtlpProfilingExporterOptions): ProfileExporter;
+  createFileExporter(options: FileProfilingExporterOptions): ProfileExporter;
   createProfiler(options: NodeProfilingOptions): NodeProfiling;
 }
 
 const defaultDependencies: ProfilingDependencies = {
-  createExporter: options => {
-    const { HttpProfilingExporter } =
+  createFileExporter: options => {
+    const { FileProfilingExporter } =
       require('@beacon-observability/profiler-nodejs') as typeof import('@beacon-observability/profiler-nodejs');
-    return new HttpProfilingExporter(options);
+    return new FileProfilingExporter(options);
+  },
+  createExporter: options => {
+    const { OtlpProfilingExporter } =
+      require('@beacon-observability/profiler-nodejs') as typeof import('@beacon-observability/profiler-nodejs');
+    return new OtlpProfilingExporter(options);
   },
   createProfiler: options => {
     const { NodeProfiling } =
@@ -45,14 +52,13 @@ export function startProfilingFromEnv(
     return undefined;
   }
 
-  const endpoint = nonEmpty(env.OTEL_PROFILING_PPROF_UPLOAD_URL);
-  if (endpoint === undefined) {
+  const exporterName = nonEmpty(env.OTEL_PROFILING_EXPORTER) ?? 'otlp';
+  if (!['otlp', 'file'].includes(exporterName)) {
     diag.error(
-      'OTEL_PROFILING_ENABLED is true, but OTEL_PROFILING_PPROF_UPLOAD_URL is not configured; profiling is disabled'
+      `Unsupported profiling exporter '${exporterName}'; profiling is disabled`
     );
     return undefined;
   }
-
   const intervalSeconds = positiveNumber(
     env.OTEL_PROFILING_EXPORT_INTERVAL,
     DEFAULT_EXPORT_INTERVAL_SECONDS,
@@ -63,10 +69,39 @@ export function startProfilingFromEnv(
   const memoryEnabled = parseBoolean(env.OTEL_PROFILING_MEMORY_ENABLED, false);
 
   try {
-    const exporter = dependencies.createExporter({
-      endpoint,
-      headers: parseHeaders(env.OTEL_PROFILING_PPROF_HEADERS),
-    });
+    let exporter: ProfileExporter;
+    if (exporterName === 'file') {
+      exporter = dependencies.createFileExporter({
+        directory: nonEmpty(env.OTEL_PROFILING_FILE_PATH) ?? 'otel-profiles',
+      });
+    } else {
+      const protocol =
+        nonEmpty(env.OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL) ??
+        nonEmpty(env.OTEL_EXPORTER_OTLP_PROTOCOL) ??
+        'http/protobuf';
+      if (protocol !== 'http/protobuf' && protocol !== 'grpc')
+        throw new Error(`Unsupported OTLP Profiles protocol '${protocol}'`);
+      const sharedEndpoint = nonEmpty(env.OTEL_EXPORTER_OTLP_ENDPOINT);
+      const endpoint =
+        nonEmpty(env.OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT) ??
+        (protocol === 'grpc'
+          ? (sharedEndpoint ?? 'http://localhost:4317')
+          : `${(sharedEndpoint ?? 'http://localhost:4318').replace(/\/+$/, '')}/v1development/profiles`);
+      exporter = dependencies.createExporter({
+        endpoint,
+        protocol,
+        headers: parseHeaders(
+          env.OTEL_EXPORTER_OTLP_PROFILES_HEADERS ??
+            env.OTEL_EXPORTER_OTLP_HEADERS
+        ),
+        timeoutMillis: positiveNumber(
+          env.OTEL_EXPORTER_OTLP_PROFILES_TIMEOUT ??
+            env.OTEL_EXPORTER_OTLP_TIMEOUT,
+          10000,
+          'OTEL_EXPORTER_OTLP_PROFILES_TIMEOUT'
+        ),
+      });
+    }
     const profiler = dependencies.createProfiler({
       exporter,
       intervalMillis,
@@ -142,8 +177,7 @@ function parseKeyValueList(
     const key = trimmed.slice(0, separatorIndex).trim();
     const itemValue = trimmed.slice(separatorIndex + 1).trim();
     if (key !== '') {
-      if (allowColon) result[key] = itemValue;
-      else {
+      {
         try {
           result[decodeURIComponent(key)] = decodeURIComponent(itemValue);
         } catch {

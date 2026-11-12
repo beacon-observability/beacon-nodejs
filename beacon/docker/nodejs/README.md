@@ -61,7 +61,7 @@ been accepted. Ordinary package builds do not publish a container image.
    production `package-lock.json`, then archives the Dockerfile and build context.
 3. Native amd64 and arm64 candidates consume the same checksummed snapshot with
    dependency scripts disabled. They verify CommonJS/ESM preload, correlated OTLP
-   traces, disabled optional features, native multipart profiles and opt-in
+   traces, disabled optional features, native OTLP Profiles and opt-in
    Security SBOM delivery with non-root, read-only containers.
 4. Review the snapshot and results, then approve the `beacon-release` environment.
    The publish job promotes those tested archives without rebuilding, rejects an

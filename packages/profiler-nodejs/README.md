@@ -1,97 +1,69 @@
-# `@beacon-observability/profiler-nodejs`
+# Beacon Node.js Profiling
 
-This package provides a practical Node.js profiling bridge for OpenTelemetry
-users. It is not an implementation of the OpenTelemetry Profiles signal.
+This experimental package collects Node.js wall and heap profiles using
+`@datadog/pprof`. Source changes below require a new Beacon release.
 
-The package:
+## Zero-code setup
 
-- collects Node.js `wall` and `heap` profiles with `@datadog/pprof`
-- reshapes Node.js profiles into the legacy `ddtrace` file layout expected by the target profiling receiver
-- maps OpenTelemetry resource attributes to profiling tags
-- exports `pprof` payloads to a compatible HTTP profiling receiver
+Keep the preload from [Beacon Node.js](../nodejs/README.md), then configure one exporter:
 
-## Status
-
-Version `1.0.0` was the first public npm release. Receiver compatibility
-depends on the configured endpoint accepting the multipart layout documented
-below.
-
-## Installation
-
-```sh
-npm install @beacon-observability/profiler-nodejs@1.3.1
+```bash
+export OTEL_PROFILING_ENABLED=true
+export OTEL_PROFILING_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT=http://localhost:4318/v1development/profiles
 ```
 
-See [USAGE.md](./USAGE.md) for a short module overview, configuration options,
-defaults, and a minimal setup example.
+For gRPC, set `OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL=grpc` and
+`OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT=http://localhost:4317`.
+Use `https://` endpoints for TLS. The receiver must support the development
+OTLP Profiles schema from OpenTelemetry Proto v1.11.0, not only OTLP traces.
 
-## Usage
+For local gzip pprof files:
 
-```ts
-import { resourceFromAttributes } from '@opentelemetry/resources';
-import {
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
-  SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
-} from '@opentelemetry/semantic-conventions';
-import {
-  HttpProfilingExporter,
-  NodeProfiling,
-} from '@beacon-observability/profiler-nodejs';
+```bash
+export OTEL_PROFILING_ENABLED=true
+export OTEL_PROFILING_EXPORTER=file
+export OTEL_PROFILING_FILE_PATH=./profiles
+```
 
+File export does not read or validate OTLP endpoint, protocol, headers or timeout.
+
+## Export configuration
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `OTEL_PROFILING_EXPORTER` | `otlp` | `otlp` or `file`; disable profiling with `OTEL_PROFILING_ENABLED=false`. |
+| `OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL` | Shared OTLP protocol, then `http/protobuf` | `http/protobuf` or `grpc`. |
+| `OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT` | Protocol-dependent | Exact signal endpoint. HTTP defaults to `http://localhost:4318/v1development/profiles`; gRPC defaults to `http://localhost:4317`. |
+| `OTEL_EXPORTER_OTLP_PROFILES_HEADERS` | Shared OTLP headers | Comma-separated, percent-encoded `key=value` pairs. |
+| `OTEL_EXPORTER_OTLP_PROFILES_TIMEOUT` | Shared OTLP timeout, then `10000` | Milliseconds. |
+| `OTEL_PROFILING_FILE_PATH` | `otel-profiles` | Local output directory, used only by `file`. |
+
+When the signal endpoint is unset, the shared `OTEL_EXPORTER_OTLP_ENDPOINT`
+is used. HTTP appends `/v1development/profiles`; gRPC uses the shared endpoint as-is.
+The previous HTTP multipart exporter and its configuration are removed.
+
+`OTEL_PROFILING_EXPORT_INTERVAL` is in seconds (default `60`). Wall collection
+is on by default; `OTEL_PROFILING_MEMORY_ENABLED=true` adds heap samples.
+
+## Standalone API
+
+```javascript
+const { NodeProfiling, OtlpProfilingExporter, FileProfilingExporter } =
+  require('@beacon-observability/profiler-nodejs');
 const profiler = new NodeProfiling({
-  resource: resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: 'orders-api',
-    [ATTR_SERVICE_VERSION]: '1.2.3',
-    [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: 'dev',
+  exporter: new OtlpProfilingExporter({
+    endpoint: 'http://localhost:4317',
+    protocol: 'grpc',
   }),
-  exporter: new HttpProfilingExporter({
-    endpoint: 'http://127.0.0.1:8081/profiles',
-  }),
-  profileTypes: ['wall', 'heap'],
-  cpuProfilingEnabled: true,
 });
-
 await profiler.start();
+// Before application shutdown:
+await profiler.shutdown();
 ```
 
-## Receiver Endpoint
-
-The exporter sends multipart profile uploads to the explicitly configured HTTP
-endpoint. Beacon does not select or require a specific backend.
-
-```ts
-new HttpProfilingExporter({
-  endpoint: 'http://127.0.0.1:8081/profiles',
-});
-```
-
-## Notes
-
-- This package currently focuses on `wall` and `heap` profiles because those
-  are the stable public capabilities exposed by `@datadog/pprof`.
-- The exporter currently emits `wall.pprof` and `space.pprof` to match the
-  legacy `ddtrace` Node.js profile layout consumed by the target receiver.
-- `wall.pprof` contains `sample`, optional `cpu`, and `wall` sample types.
-- `space.pprof` contains `objects` and `space` sample types.
-- This layout is intentional: the compatible receiver looks for `wall.pprof`
-  and `space.pprof`, not a single `auto.pprof`.
-- The package is intended as a bridge for practical profiling integration in
-  `opentelemetry-js-contrib`, not as a substitute for a future first-class
-  OpenTelemetry Profiles SDK in `opentelemetry-js`.
-
-## Collection lifecycle
-
-The native profiler is loaded only when collection starts. Automatic wall
-collection uses an unreferenced timer so it does not keep an idle CLI or batch
-application alive. Shutdown cancels and discards an unfinished wall
-sample, waits for an export already in progress, and stops heap sampling. An
-explicit `collectOnce()` remains an awaited, referenced collection. Repeated
-shutdown calls share one completion promise.
-
-Programmatic `intervalMillis` and `wallDurationMillis` must be finite and between
-1 and 2,147,483,647 milliseconds; invalid values throw `RangeError` instead of
-becoming a 1ms Node timer. The zero-code environment adapter warns and uses the
-default for invalid interval seconds. Service/version/environment/host tags can
-fall back to decoded standard OTel resource attributes. Explicit options and
-Resource attributes remain higher-priority API inputs.
+Use `new FileProfilingExporter({directory: './profiles'})` for local output.
+The converter preserves functions, locations, stacks and sample values; each
+pprof sample type becomes a separate OTLP Profile. HTTP and gRPC share the same
+protobuf request. Profiling remains opt-in and native loading failures are isolated.

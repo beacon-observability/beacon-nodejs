@@ -82,7 +82,8 @@ try {
       OTEL_BSP_SCHEDULE_DELAY: '100',
       OTEL_LOG_LEVEL: usingExternalReceiver ? 'debug' : 'info',
       OTEL_PROFILING_ENABLED: usingExternalReceiver ? 'false' : 'true',
-      OTEL_PROFILING_PPROF_UPLOAD_URL: `${endpoint}/profiles`,
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: `${endpoint}/v1development/profiles`,
+      OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL: 'http/protobuf',
       OTEL_PROFILING_EXPORT_INTERVAL: '1',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -130,26 +131,18 @@ try {
       );
     }
 
-    const profileRequests = received.filter(item => item.path === '/profiles');
+    const profileRequests = received.filter(
+      item => item.path === '/v1development/profiles'
+    );
     if (
       !profileRequests.some(
         item =>
-          item.contentType.includes('multipart/form-data') &&
-          item.body.includes(Buffer.from('wall.pprof')) &&
-          item.body.includes(Buffer.from('event.json')) &&
+          item.contentType === 'application/x-protobuf' &&
           item.body.includes(Buffer.from('beacon-zero-code-smoke'))
       )
     ) {
-      const profileDiagnostics = profileRequests.map(item => ({
-        contentType: item.contentType,
-        bytes: item.body.length,
-        hasWallProfile: item.body.includes(Buffer.from('wall.pprof')),
-        hasEvent: item.body.includes(Buffer.from('event.json')),
-      }));
       throw new Error(
-        `no compatible multipart profile payload was received: ${JSON.stringify(
-          profileDiagnostics
-        )}\n${errorOutput}`
+        `no OTLP Profiles protobuf request received\n${errorOutput}`
       );
     }
 
@@ -261,7 +254,7 @@ async function stagePackage(explicitRegisterPath) {
     [
       '-e',
       `const beacon = require('@beacon-observability/nodejs');
-       const expected = ['HttpProfilingExporter', 'NodeProfiling', 'startProfilingFromEnv'];
+       const expected = ['FileProfilingExporter', 'NodeProfiling', 'OtlpProfilingExporter', 'startProfilingFromEnv'];
        const actual = Object.keys(beacon).sort();
        if (JSON.stringify(actual) !== JSON.stringify(expected)) {
          throw new Error('unexpected public exports: ' + actual.join(', '));

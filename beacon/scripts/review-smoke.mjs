@@ -18,7 +18,7 @@ const receiver = http.createServer((request, response) => {
   request.on('end', () => {
     received.push({ path: request.url, body: Buffer.concat(chunks) });
     response.writeHead(200);
-    response.end('{}');
+    response.end(request.url === '/v1development/profiles' ? '' : '{}');
   });
 });
 await new Promise(resolve => receiver.listen(0, '127.0.0.1', resolve));
@@ -48,8 +48,9 @@ const environment = {
   OTEL_BLRP_SCHEDULE_DELAY: '60000',
   OTEL_PROFILING_ENABLED: 'false',
   OTEL_SDK_DISABLED: 'false',
-  OTEL_PROFILING_PPROF_HEADERS: '',
-  OTEL_PROFILING_PPROF_UPLOAD_URL: `${endpoint}/profiles`,
+  OTEL_EXPORTER_OTLP_PROFILES_HEADERS: '',
+  OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: `${endpoint}/v1development/profiles`,
+  OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL: 'http/protobuf',
   BEACON_SECURITY_LOCAL_OUTPUT_ENABLED: 'false',
   BEACON_SECURITY_OUTPUT: path.join(directory, 'security-output'),
   BEACON_SECURITY_CONTROL_FILE: path.join(directory, 'test-control.json'),
@@ -193,12 +194,12 @@ try {
     const {startProfilingFromEnv} = require('@beacon-observability/nodejs');
     assert.equal(startProfilingFromEnv({}), undefined);
     assert.equal(Object.keys(require.cache).some(name => name.endsWith('.node')), false);
-    const profiler=startProfilingFromEnv({ OTEL_PROFILING_ENABLED:'true', OTEL_PROFILING_PPROF_UPLOAD_URL:'http://127.0.0.1' });
+    const profiler=startProfilingFromEnv({ OTEL_PROFILING_ENABLED:'true', OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:'http://127.0.0.1' });
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(bindingAttempts,1);
     await profiler.shutdown();
     packageFailure=true;
-    assert.equal(startProfilingFromEnv({ OTEL_PROFILING_ENABLED:'true', OTEL_PROFILING_PPROF_UPLOAD_URL:'http://127.0.0.1' }), undefined);
+    assert.equal(startProfilingFromEnv({ OTEL_PROFILING_ENABLED:'true', OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:'http://127.0.0.1' }), undefined);
     })().catch(error=>{console.error(error);process.exitCode=1;});
   `
   );
@@ -320,9 +321,9 @@ try {
   assert.ok(
     tagged.some(
       item =>
-        item.path === '/profiles' &&
-        item.body.includes(Buffer.from('service:checkout')) &&
-        item.body.includes(Buffer.from('version:v 1'))
+        item.path === '/v1development/profiles' &&
+        item.body.includes(Buffer.from('checkout')) &&
+        item.body.includes(Buffer.from('v 1'))
     )
   );
   assert.ok(

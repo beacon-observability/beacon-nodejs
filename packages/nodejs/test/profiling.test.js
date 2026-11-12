@@ -14,7 +14,7 @@ describe('startProfilingFromEnv', () => {
     const calls = [];
     const env = {
       OTEL_PROFILING_ENABLED: 'true',
-      OTEL_PROFILING_PPROF_UPLOAD_URL: 'http://127.0.0.1',
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: 'http://127.0.0.1',
       OTEL_RESOURCE_ATTRIBUTES:
         'service.name=checkout,service.version=v%201,deployment.environment.name=prod%2Ceast',
     };
@@ -34,7 +34,7 @@ describe('startProfilingFromEnv', () => {
     const calls = [];
     const env = {
       OTEL_PROFILING_ENABLED: 'true',
-      OTEL_PROFILING_PPROF_UPLOAD_URL: 'http://127.0.0.1',
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: 'http://127.0.0.1',
       OTEL_PROFILING_EXPORT_INTERVAL: '2147484',
     };
     startProfilingFromEnv(env, fakeDependencies(calls));
@@ -56,15 +56,81 @@ describe('startProfilingFromEnv', () => {
     assert.deepEqual(calls, []);
   });
 
-  it('requires an upload URL when profiling is enabled', () => {
+  it('defaults to OTLP HTTP and allows file without parsing OTLP settings', () => {
     const calls = [];
-    const profiler = startProfilingFromEnv(
+    startProfilingFromEnv(
       { OTEL_PROFILING_ENABLED: 'true' },
       fakeDependencies(calls)
     );
-
-    assert.equal(profiler, undefined);
-    assert.deepEqual(calls, []);
+    assert.equal(
+      calls[0].options.endpoint,
+      'http://localhost:4318/v1development/profiles'
+    );
+    calls.length = 0;
+    startProfilingFromEnv(
+      {
+        OTEL_PROFILING_ENABLED: 'true',
+        OTEL_PROFILING_EXPORTER: 'file',
+        OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: 'invalid',
+        OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL: 'invalid',
+      },
+      fakeDependencies(calls)
+    );
+    assert.equal(calls[0].kind, 'file');
+  });
+  it('supports grpc and gives profile settings precedence', () => {
+    const calls = [];
+    startProfilingFromEnv(
+      {
+        OTEL_PROFILING_ENABLED: 'true',
+        OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL: 'grpc',
+      },
+      fakeDependencies(calls)
+    );
+    assert.equal(calls[0].options.endpoint, 'http://localhost:4317');
+    assert.equal(calls[0].options.protocol, 'grpc');
+  });
+  it('uses signal endpoints as-is and appends paths only to shared HTTP endpoints', () => {
+    for (const [settings, expected] of [
+      [
+        { OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4318/base/' },
+        'http://collector:4318/base/v1development/profiles',
+      ],
+      [
+        {
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://shared:4318',
+          OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: 'http://signal:4318/custom',
+        },
+        'http://signal:4318/custom',
+      ],
+      [
+        {
+          OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4317',
+        },
+        'http://collector:4317',
+      ],
+    ]) {
+      const calls = [];
+      startProfilingFromEnv(
+        { OTEL_PROFILING_ENABLED: 'true', ...settings },
+        fakeDependencies(calls)
+      );
+      assert.equal(calls[0].options.endpoint, expected);
+    }
+  });
+  it('rejects removed exporter names', () => {
+    for (const exporter of ['unknown', 'pprof_http', 'none']) {
+      const calls = [];
+      assert.equal(
+        startProfilingFromEnv(
+          { OTEL_PROFILING_ENABLED: 'true', OTEL_PROFILING_EXPORTER: exporter },
+          fakeDependencies(calls)
+        ),
+        undefined
+      );
+      assert.equal(calls.length, 0);
+    }
   });
 
   it('creates and starts profiling entirely from environment variables', async () => {
@@ -72,8 +138,8 @@ describe('startProfilingFromEnv', () => {
     const profiler = startProfilingFromEnv(
       {
         OTEL_PROFILING_ENABLED: 'true',
-        OTEL_PROFILING_PPROF_UPLOAD_URL: 'http://127.0.0.1:9529/profiles',
-        OTEL_PROFILING_PPROF_HEADERS: 'X-API-Key:secret,tenant=demo',
+        OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: 'http://127.0.0.1:9529/profiles',
+        OTEL_EXPORTER_OTLP_PROFILES_HEADERS: 'X-API-Key:secret,tenant=demo',
         OTEL_PROFILING_EXPORT_INTERVAL: '2.5',
         OTEL_PROFILING_MEMORY_ENABLED: 'false',
         OTEL_SERVICE_NAME: 'checkout',
@@ -90,6 +156,8 @@ describe('startProfilingFromEnv', () => {
         kind: 'exporter',
         options: {
           endpoint: 'http://127.0.0.1:9529/profiles',
+          protocol: 'http/protobuf',
+          timeoutMillis: 10000,
           headers: { 'X-API-Key': 'secret', tenant: 'demo' },
         },
       },
@@ -113,6 +181,10 @@ describe('startProfilingFromEnv', () => {
 
 function fakeDependencies(calls) {
   return {
+    createFileExporter(options) {
+      calls.push({ kind: 'file', options });
+      return { kind: 'fake-exporter' };
+    },
     createExporter(options) {
       calls.push({ kind: 'exporter', options });
       return { kind: 'fake-exporter' };
