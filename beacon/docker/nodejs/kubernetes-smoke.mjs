@@ -47,7 +47,7 @@ try {
       kind: 'ConfigMap',
       metadata: { name: 'fixture' },
       data: Object.fromEntries(
-        ['smoke.mjs', 'fixture.cjs'].map(name => [
+        ['smoke.mjs', 'fixture.cjs', 'profile-contract.mjs'].map(name => [
           name,
           readFileSync(join(here, name), 'utf8'),
         ])

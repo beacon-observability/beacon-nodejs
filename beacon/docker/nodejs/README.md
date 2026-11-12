@@ -61,7 +61,7 @@ been accepted. Ordinary package builds do not publish a container image.
    production `package-lock.json`, then archives the Dockerfile and build context.
 3. Native amd64 and arm64 candidates consume the same checksummed snapshot with
    dependency scripts disabled. They verify CommonJS/ESM preload, correlated OTLP
-   traces, disabled optional features, native OTLP Profiles and opt-in
+   traces, disabled optional features, native profiles and opt-in
    Security SBOM delivery with non-root, read-only containers.
 4. Review the snapshot and results, then approve the `beacon-release` environment.
    The publish job promotes those tested archives without rebuilding, rejects an
@@ -109,3 +109,9 @@ receiver delivery, then deletes the namespace on success or failure. It does not
 kubectl context. `BEACON_K8S_NODE_IMAGE` can select a reachable equivalent of the pinned Node.js
 fixture runtime. Cluster acceptance covers the architecture actually tested and does not establish
 external backend compatibility or complete Security detection coverage.
+
+The image smoke selects the profiling wire contract from the exporter API in the
+installed candidate. Published releases with multipart profiling retain their
+original acceptance protocol; candidates exposing `OtlpProfilingExporter` are
+checked with OTLP/HTTP. This is a test-fixture distinction and does not restore
+legacy exporters in the current profiler package.

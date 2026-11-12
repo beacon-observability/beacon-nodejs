@@ -35,6 +35,8 @@ jobs:
         with:
           node-version: '22'
           package-manager-cache: false
+      - name: Test candidate profiling contracts
+        run: node --test beacon/docker/nodejs/profile-contract.test.mjs
       - name: Prepare one shared dependency snapshot, or reuse it on rerun
         id: snapshot
         env:

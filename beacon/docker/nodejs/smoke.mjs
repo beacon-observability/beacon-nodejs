@@ -3,6 +3,8 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import http from 'node:http';
+import { createRequire } from 'node:module';
+import { profileContract } from './profile-contract.mjs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -54,6 +56,10 @@ for (const item of manifest.items) {
     );
   }
 }
+const candidateRequire = createRequire(join(bundle, 'package.json'));
+const profilesContract = profileContract(
+  candidateRequire('@beacon-observability/profiler-nodejs')
+);
 const received = [];
 const receiver = http.createServer((request, response) => {
   const chunks = [];
@@ -94,8 +100,7 @@ try {
         OTEL_BLRP_SCHEDULE_DELAY: '100',
         OTEL_PROFILING_ENABLED: String(esm),
         OTEL_PROFILING_EXPORT_INTERVAL: '1',
-        OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: `${endpoint}/v1development/profiles`,
-        OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL: 'http/protobuf',
+        ...profilesContract.environment(endpoint),
         BEACON_SECURITY_ENABLED: String(esm),
         BEACON_SECURITY_NODE_INCLUDE: here,
         BEACON_SECURITY_LOCAL_OUTPUT_ENABLED: 'false',
@@ -150,14 +155,14 @@ try {
       'Expected propagated parent span'
     );
     const profiles = received.filter(
-      item => item.path === '/v1development/profiles'
+      item => item.path === profilesContract.path
     );
     const logs = received.filter(item => item.path === '/v1/logs');
     if (esm) {
       assert(
         profiles.some(
           item =>
-            item.contentType === 'application/x-protobuf' &&
+            profilesContract.matches(item) &&
             item.body.includes(Buffer.from('beacon-nodejs-image-smoke'))
         ),
         `No native profile: ${output}`
