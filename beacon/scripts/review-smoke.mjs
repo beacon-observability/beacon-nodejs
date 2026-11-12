@@ -297,7 +297,7 @@ try {
     'app.cjs',
     `
     const http=require('node:http');
-    const server=http.createServer((req,res)=>{ if(process.env.APP_DELAY) { console.log('REQUEST_ACTIVE'); setTimeout(()=>res.end('ok'),100); } else res.end('ok'); }).listen(0,'127.0.0.1',()=>{
+    const server=http.createServer((req,res)=>{ if(process.env.APP_CLOSE_AFTER_PROFILE && req.url === '/__close') { res.setHeader('connection','close'); res.end('closed'); server.close(); return; } if(process.env.APP_DELAY) { console.log('REQUEST_ACTIVE'); setTimeout(()=>res.end('ok'),100); } else res.end('ok'); }).listen(0,'127.0.0.1',()=>{
       console.log('READY '+server.address().port);
       if(process.env.APP_REQUEST) http.get('http://127.0.0.1:'+server.address().port,res=>res.resume());
       if(process.env.APP_CLOSE) setTimeout(()=>server.close(),250);
@@ -306,17 +306,34 @@ try {
   `
   );
   const beforeTags = received.length;
-  assert.deepEqual(
-    await exited(
-      launch(app, {
-        APP_REQUEST: 'true',
-        APP_CLOSE: 'true',
-        OTEL_PROFILING_ENABLED: 'true',
-        OTEL_PROFILING_EXPORT_INTERVAL: '0.05',
-      })
-    ),
-    { code: 0, signal: null }
+  const taggedChild = launch(app, {
+    APP_REQUEST: 'true',
+    APP_CLOSE_AFTER_PROFILE: 'true',
+    OTEL_PROFILING_ENABLED: 'true',
+    OTEL_PROFILING_EXPORT_INTERVAL: '0.05',
+  });
+  // Keep the application alive until profiling is actually delivered. A fixed
+  // 250 ms lifetime can cancel the first native collection on a busy runner.
+  await until(
+    () =>
+      received
+        .slice(beforeTags)
+        .some(
+          item =>
+            item.path === '/v1development/profiles' &&
+            item.body.includes(Buffer.from('checkout')) &&
+            item.body.includes(Buffer.from('v 1'))
+        ),
+    taggedChild
   );
+  const taggedPort = await until(
+    () => /READY (\d+)/.exec(taggedChild.output)?.[1],
+    taggedChild
+  );
+  const closeResponse = await fetch(`http://127.0.0.1:${taggedPort}/__close`);
+  assert.equal(closeResponse.status, 200);
+  await closeResponse.arrayBuffer();
+  assert.deepEqual(await exited(taggedChild), { code: 0, signal: null });
   const tagged = received.slice(beforeTags);
   assert.ok(
     tagged.some(
