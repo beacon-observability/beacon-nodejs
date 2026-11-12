@@ -1,122 +1,128 @@
 /*
  * Copyright The OpenTelemetry Authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Client, credentials, Metadata } from '@grpc/grpc-js';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { diag } from '@opentelemetry/api';
-
+import { encodeProfiles, profilesResponse } from './otlp';
 import type {
-  HttpProfilingExporterOptions,
+  OtlpProfilingExporterOptions,
   ProfileBatch,
   ProfileExporter,
+  FileProfilingExporterOptions,
 } from './types';
 
-const DEFAULT_TIMEOUT_MILLIS = 30_000;
-
-export class HttpProfilingExporter implements ProfileExporter {
+export class OtlpProfilingExporter implements ProfileExporter {
   private readonly endpoint: string;
+  private readonly client?: Client;
   private readonly timeoutMillis: number;
   private readonly headers: Record<string, string>;
   private readonly fetchImpl: typeof fetch;
 
-  constructor(options: HttpProfilingExporterOptions) {
-    this.endpoint = options.endpoint;
-    this.timeoutMillis = options.timeoutMillis ?? DEFAULT_TIMEOUT_MILLIS;
+  constructor(options: OtlpProfilingExporterOptions) {
+    const url = new URL(options.endpoint);
+    if (!['http:', 'https:'].includes(url.protocol))
+      throw new Error('OTLP Profiles requires an HTTP(S) endpoint');
+    this.endpoint = url.toString();
+    if (options.protocol === 'grpc') {
+      if (url.pathname !== '/' || url.search || url.hash)
+        throw new Error(
+          'gRPC Profiles endpoint must contain only scheme and host:port'
+        );
+      this.client = new Client(
+        url.host,
+        url.protocol === 'http:'
+          ? credentials.createInsecure()
+          : credentials.createSsl()
+      );
+    }
+    this.timeoutMillis = options.timeoutMillis ?? 10000;
+    if (
+      !Number.isFinite(this.timeoutMillis) ||
+      this.timeoutMillis < 1 ||
+      this.timeoutMillis > 2147483647
+    )
+      throw new Error(
+        'OTLP Profiles timeout must be between 1 and 2147483647 milliseconds'
+      );
     this.headers = options.headers ?? {};
     this.fetchImpl = options.fetch ?? globalThis.fetch;
-
-    if (typeof this.fetchImpl !== 'function') {
+    if (typeof this.fetchImpl !== 'function')
       throw new Error('global fetch is not available');
-    }
   }
 
-  async export(batch: ProfileBatch): Promise<void> {
-    const form = new FormData();
-
-    for (const profile of batch.profiles) {
-      form.append(
-        profile.type,
-        new Blob([new Uint8Array(profile.data)], {
-          type: 'application/octet-stream',
-        }),
-        profile.filename
-      );
+  public async export(batch: ProfileBatch): Promise<void> {
+    if (this.client) {
+      const metadata = new Metadata();
+      for (const [key, value] of Object.entries(this.headers))
+        metadata.set(key, value);
+      const response = await new Promise<Uint8Array>((resolve, reject) => {
+        this.client!.makeUnaryRequest(
+          '/opentelemetry.proto.collector.profiles.v1development.ProfilesService/Export',
+          (value: Uint8Array) => Buffer.from(value),
+          (value: Buffer) => value,
+          encodeProfiles(batch),
+          metadata,
+          { deadline: Date.now() + this.timeoutMillis },
+          (error, value) => (error ? reject(error) : resolve(value!))
+        );
+      });
+      this.checkResponse(response);
+      return;
     }
-
-    form.append(
-      'event',
-      new Blob([JSON.stringify(this.serializeEvent(batch))], {
-        type: 'application/json',
-      }),
-      'event.json'
-    );
-
     const response = await this.fetchImpl(this.endpoint, {
       method: 'POST',
-      body: form,
-      headers: this.headers,
+      body: new Uint8Array(encodeProfiles(batch)),
+      headers: { ...this.headers, 'Content-Type': 'application/x-protobuf' },
       signal: AbortSignal.timeout(this.timeoutMillis),
+      redirect: 'error',
     });
-
-    if (!response.ok) {
-      const body = await safeReadBody(response);
+    if (!response.ok)
       throw new Error(
-        `profiling export failed: ${response.status} ${response.statusText}${body}`
+        `profiling export failed: ${response.status} ${response.statusText}`
+      );
+    const body = new Uint8Array(await response.arrayBuffer());
+    this.checkResponse(body);
+  }
+
+  private checkResponse(body: Uint8Array): void {
+    const result = profilesResponse.toObject(profilesResponse.decode(body), {
+      longs: String,
+    });
+    if (result.partialSuccess) {
+      const partial = result.partialSuccess;
+      if (partial.rejectedProfiles && partial.rejectedProfiles !== '0')
+        throw new Error(
+          `OTLP Profiles rejected ${partial.rejectedProfiles} profiles: ${partial.errorMessage ?? ''}`
+        );
+      if (partial.errorMessage)
+        diag.warn(`OTLP Profiles: ${partial.errorMessage}`);
+    }
+  }
+
+  public async shutdown(): Promise<void> {
+    this.client?.close();
+  }
+}
+
+export class FileProfilingExporter implements ProfileExporter {
+  constructor(private readonly options: FileProfilingExporterOptions) {}
+  public async export(batch: ProfileBatch): Promise<void> {
+    await mkdir(this.options.directory, { recursive: true });
+    for (const profile of batch.profiles) {
+      await writeFile(
+        join(
+          this.options.directory,
+          `profile-${batch.startTime.getTime()}-${randomUUID()}.pprof`
+        ),
+        profile.data,
+        { flag: 'wx' }
       );
     }
-
-    diag.debug(
-      `Profiling export succeeded for ${batch.profiles.length} profile(s)`
-    );
   }
-
-  async shutdown(): Promise<void> {}
-
-  private serializeEvent(batch: ProfileBatch) {
-    return {
-      version: '4',
-      profiler: 'ddtrace',
-      attachments: batch.profiles.map(profile => profile.filename),
-      start: formatTimestamp(batch.startTime),
-      end: formatTimestamp(batch.endTime),
-      family: batch.family,
-      format: batch.format,
-      tags_profiler: joinTags(batch.tags),
-    };
-  }
-}
-
-async function safeReadBody(response: Response): Promise<string> {
-  try {
-    const text = await response.text();
-    if (text === '') {
-      return '';
-    }
-    return ` - ${text.slice(0, 300)}`;
-  } catch {
-    return '';
-  }
-}
-
-function joinTags(tags: Record<string, string>): string {
-  return Object.entries(tags)
-    .filter(([, value]) => value !== '')
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${key}:${value}`)
-    .join(',');
-}
-
-function formatTimestamp(date: Date): string {
-  return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  public async shutdown(): Promise<void> {}
 }

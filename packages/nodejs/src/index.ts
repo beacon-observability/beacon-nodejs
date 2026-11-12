@@ -4,7 +4,8 @@
  */
 
 export {
-  HttpProfilingExporter,
+  OtlpProfilingExporter,
+  FileProfilingExporter,
   NodeProfiling,
 } from '@beacon-observability/profiler-nodejs';
 export { startProfilingFromEnv } from './profiling';

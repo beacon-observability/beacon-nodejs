@@ -66,57 +66,18 @@ separate Security image, sidecar, or init container.
 ## Optional profiling
 
 Profiling is disabled unless explicitly enabled. To export compatible
-multipart `pprof` profiles together with auto-instrumented telemetry:
+OTLP Profiles or local pprof files alongside auto-instrumented telemetry:
 
 ```bash
 export OTEL_PROFILING_ENABLED=true
-export OTEL_PROFILING_PPROF_UPLOAD_URL="http://127.0.0.1:9529/profiles"
+export OTEL_PROFILING_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT=http://localhost:4318/v1development/profiles
 ```
 
-Supported profiling variables:
-
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `OTEL_PROFILING_ENABLED` | Enables Beacon profiling | `false` |
-| `OTEL_PROFILING_PPROF_UPLOAD_URL` | Required multipart profile endpoint | none |
-| `OTEL_PROFILING_PPROF_HEADERS` | Comma-separated `name=value` or `name:value` headers | none |
-| `OTEL_PROFILING_EXPORT_INTERVAL` | Collection interval in seconds | `60` |
-| `OTEL_PROFILING_MEMORY_ENABLED` | Includes heap profiles | `false` |
-
-The profiler emits a compatible multipart `pprof` layout. It is not an
-implementation of the OpenTelemetry Profiles signal.
-
-## Programmatic exports
-
-The package exports `startProfilingFromEnv`, `NodeProfiling`, and
-`HttpProfilingExporter`. Use the zero-code register entry point for the
-supported out-of-the-box auto-instrumentation setup.
-
-## Runtime support
-
-Node.js `18.19+`, `20.6+`, `22`, and `24` are covered by the Beacon CI matrix.
-
-## License
-
-Apache 2.0
-
-## Preload and shutdown behavior
-
-For native ESM dependencies, use `--import @beacon-observability/nodejs/register`.
-The Security-disabled ESM entry installs the OTel module loader before starting
-the SDK; enabling Security uses its compatible synchronous loader instead.
-CommonJS `--require` remains available for CommonJS applications.
-
-The zero-code entry owns one SDK and closes Security, profiling, then the SDK so
-Security can emit final occurrences before the shared Logs provider closes. If
-Beacon is the sole signal handler, the first SIGINT/SIGTERM allows bounded cleanup
-(up to 2.5 seconds) and then restores signal termination. Application-owned signal
-handlers retain their exit policy and can drain requests before normal
-`beforeExit` cleanup. An application that calls `process.exit()` or is forcibly
-killed bypasses asynchronous completion; delivery is not guaranteed.
-
-Disabled profiling does not load its native addon, including when importing the
-public API. Requested profiling that cannot initialize produces a diagnostic
-without preventing application/tracing startup. `OTEL_SERVICE_NAME` takes
-precedence over the percent-decoded `service.name` in `OTEL_RESOURCE_ATTRIBUTES`;
-profile resource tags follow the same environment identity.
+For gRPC set `OTEL_EXPORTER_OTLP_PROFILES_PROTOCOL=grpc` and use
+`http://localhost:4317`. For local files set `OTEL_PROFILING_EXPORTER=file` and
+`OTEL_PROFILING_FILE_PATH=./profiles`; file export does not parse endpoint settings.
+See the [profiling guide](../profiler-nodejs/README.md) for the full reference
+and standalone `OtlpProfilingExporter` / `FileProfilingExporter` APIs.
+These exporter changes require a new Beacon release.

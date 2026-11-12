@@ -82,11 +82,10 @@ The experimental `@beacon-observability/profiler-nodejs` workspace package:
 - collects Node.js wall and heap profiles through `@datadog/pprof`;
 - maps OpenTelemetry resource attributes to profiling tags;
 - produces receiver-compatible `pprof` attachments; and
-- can send multipart profile batches to a configured profiling endpoint.
+- exports OTLP Profiles over HTTP/protobuf or gRPC, or gzip pprof files locally.
 
 This list identifies the public package entry points. Receiver compatibility
-still depends on the configured endpoint accepting the documented multipart
-`pprof` layout.
+requires a receiver supporting the development OTLP Profiles protobuf schema.
 
 ## Local Validation
 

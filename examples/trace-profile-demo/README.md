@@ -3,7 +3,7 @@
 This example provides a quick local check that:
 
 - trace data can be generated and exported; and
-- profiles can be collected and sent through `HttpProfilingExporter`.
+- profiles can be collected and sent through `OtlpProfilingExporter`.
 
 ## Contents
 
