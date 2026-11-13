@@ -56,6 +56,58 @@ describe('startProfilingFromEnv', () => {
     assert.deepEqual(calls, []);
   });
 
+  it('accepts the otlp name and the shared profiling endpoint without changing the exporter', () => {
+    for (const name of [undefined, 'otlp']) {
+      const calls = [];
+      const profiler = startProfilingFromEnv(
+        {
+          OTEL_PROFILING_ENABLED: 'true',
+          OTEL_PROFILING_EXPORTER: name,
+          OTEL_PROFILING_ENDPOINT: 'http://127.0.0.1:9529/profiling/v1/input',
+        },
+        fakeDependencies(calls)
+      );
+      assert.notEqual(profiler, undefined);
+      assert.equal(
+        calls[0].options.endpoint,
+        'http://127.0.0.1:9529/profiling/v1/input'
+      );
+      assert.equal(calls[1].options.intervalMillis, 60000);
+    }
+  });
+
+  it('retains explicit upload URL precedence over the endpoint alias', () => {
+    const calls = [];
+    startProfilingFromEnv(
+      {
+        OTEL_PROFILING_ENABLED: 'true',
+        OTEL_PROFILING_EXPORTER: 'otlp',
+        OTEL_PROFILING_ENDPOINT: 'http://localhost:9529/profiling/v1/input',
+        OTEL_PROFILING_PPROF_UPLOAD_URL: 'http://localhost:9529/custom',
+      },
+      fakeDependencies(calls)
+    );
+    assert.equal(calls[0].options.endpoint, 'http://localhost:9529/custom');
+  });
+
+  it('isolates unsupported exporter configuration and supports explicit disabling', () => {
+    for (const name of ['none', 'unknown']) {
+      const calls = [];
+      assert.equal(
+        startProfilingFromEnv(
+          {
+            OTEL_PROFILING_ENABLED: 'true',
+            OTEL_PROFILING_EXPORTER: name,
+            OTEL_PROFILING_ENDPOINT: 'http://localhost:9529/profiling/v1/input',
+          },
+          fakeDependencies(calls)
+        ),
+        undefined
+      );
+      assert.deepEqual(calls, []);
+    }
+  });
+
   it('requires an upload URL when profiling is enabled', () => {
     const calls = [];
     const profiler = startProfilingFromEnv(

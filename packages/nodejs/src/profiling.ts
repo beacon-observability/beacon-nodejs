@@ -45,10 +45,22 @@ export function startProfilingFromEnv(
     return undefined;
   }
 
-  const endpoint = nonEmpty(env.OTEL_PROFILING_PPROF_UPLOAD_URL);
+  const exporterName =
+    nonEmpty(env.OTEL_PROFILING_EXPORTER)?.toLowerCase() ?? 'otlp';
+  if (exporterName === 'none') {
+    return undefined;
+  }
+  if (exporterName !== 'otlp') {
+    diag.error(`Unsupported profiling exporter: ${exporterName}`);
+    return undefined;
+  }
+
+  const endpoint =
+    nonEmpty(env.OTEL_PROFILING_PPROF_UPLOAD_URL) ??
+    nonEmpty(env.OTEL_PROFILING_ENDPOINT);
   if (endpoint === undefined) {
     diag.error(
-      'OTEL_PROFILING_ENABLED is true, but OTEL_PROFILING_PPROF_UPLOAD_URL is not configured; profiling is disabled'
+      'OTEL_PROFILING_ENABLED is true, but neither OTEL_PROFILING_ENDPOINT nor OTEL_PROFILING_PPROF_UPLOAD_URL is configured; profiling is disabled'
     );
     return undefined;
   }

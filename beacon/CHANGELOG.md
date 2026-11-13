@@ -5,6 +5,11 @@ This file records Beacon product changes. The root
 the exact adopted OpenTelemetry commit is recorded in
 [`upstream.lock.json`](upstream.lock.json).
 
+## Unreleased
+
+- Accept `OTEL_PROFILING_EXPORTER=otlp` and `OTEL_PROFILING_ENDPOINT` for the
+  existing multipart/pprof exporter; preserve the explicit upload URL setting.
+
 ## 2.0.2 - 2026-11-08
 
 - Adopt the released OpenTelemetry JavaScript Contrib source commit
