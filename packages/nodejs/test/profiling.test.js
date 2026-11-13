@@ -56,8 +56,8 @@ describe('startProfilingFromEnv', () => {
     assert.deepEqual(calls, []);
   });
 
-  it('accepts the otlp name and the shared profiling endpoint without changing the exporter', () => {
-    for (const name of [undefined, 'otlp']) {
+  it('accepts the http name and the shared profiling endpoint without changing the exporter', () => {
+    for (const name of [undefined, 'http']) {
       const calls = [];
       const profiler = startProfilingFromEnv(
         {
@@ -81,7 +81,7 @@ describe('startProfilingFromEnv', () => {
     startProfilingFromEnv(
       {
         OTEL_PROFILING_ENABLED: 'true',
-        OTEL_PROFILING_EXPORTER: 'otlp',
+        OTEL_PROFILING_EXPORTER: 'http',
         OTEL_PROFILING_ENDPOINT: 'http://localhost:9529/profiling/v1/input',
         OTEL_PROFILING_PPROF_UPLOAD_URL: 'http://localhost:9529/custom',
       },
@@ -91,7 +91,7 @@ describe('startProfilingFromEnv', () => {
   });
 
   it('isolates unsupported exporter configuration and supports explicit disabling', () => {
-    for (const name of ['none', 'unknown']) {
+    for (const name of ['none', 'unknown', 'otlp']) {
       const calls = [];
       assert.equal(
         startProfilingFromEnv(

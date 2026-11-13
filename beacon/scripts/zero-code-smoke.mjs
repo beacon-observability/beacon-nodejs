@@ -82,7 +82,7 @@ try {
       OTEL_BSP_SCHEDULE_DELAY: '100',
       OTEL_LOG_LEVEL: usingExternalReceiver ? 'debug' : 'info',
       OTEL_PROFILING_ENABLED: usingExternalReceiver ? 'false' : 'true',
-      OTEL_PROFILING_EXPORTER: 'otlp',
+      OTEL_PROFILING_EXPORTER: 'http',
       OTEL_PROFILING_ENDPOINT: `${endpoint}/profiles`,
       OTEL_PROFILING_EXPORT_INTERVAL: '1',
     },

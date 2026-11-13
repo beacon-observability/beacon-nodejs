@@ -46,11 +46,11 @@ export function startProfilingFromEnv(
   }
 
   const exporterName =
-    nonEmpty(env.OTEL_PROFILING_EXPORTER)?.toLowerCase() ?? 'otlp';
+    nonEmpty(env.OTEL_PROFILING_EXPORTER)?.toLowerCase() ?? 'http';
   if (exporterName === 'none') {
     return undefined;
   }
-  if (exporterName !== 'otlp') {
+  if (exporterName !== 'http') {
     diag.error(`Unsupported profiling exporter: ${exporterName}`);
     return undefined;
   }
