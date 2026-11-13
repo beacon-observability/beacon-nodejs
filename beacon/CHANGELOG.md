@@ -7,6 +7,8 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+## 2.0.3 - 2026-11-13
+
 - Accept `OTEL_PROFILING_EXPORTER=http` and `OTEL_PROFILING_ENDPOINT` for the
   existing multipart/pprof exporter; preserve the explicit upload URL setting.
 
