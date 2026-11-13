@@ -70,7 +70,8 @@ multipart `pprof` profiles together with auto-instrumented telemetry:
 
 ```bash
 export OTEL_PROFILING_ENABLED=true
-export OTEL_PROFILING_PPROF_UPLOAD_URL="http://127.0.0.1:9529/profiles"
+export OTEL_PROFILING_EXPORTER=http
+export OTEL_PROFILING_ENDPOINT="http://127.0.0.1:9529/profiling/v1/input"
 ```
 
 Supported profiling variables:
@@ -78,10 +79,15 @@ Supported profiling variables:
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `OTEL_PROFILING_ENABLED` | Enables Beacon profiling | `false` |
-| `OTEL_PROFILING_PPROF_UPLOAD_URL` | Required multipart profile endpoint | none |
+| `OTEL_PROFILING_EXPORTER` | Existing multipart exporter name: `http`, or `none` to disable | `http` |
+| `OTEL_PROFILING_ENDPOINT` | Multipart profile endpoint | none |
+| `OTEL_PROFILING_PPROF_UPLOAD_URL` | Legacy endpoint setting; takes precedence over `ENDPOINT` | none |
 | `OTEL_PROFILING_PPROF_HEADERS` | Comma-separated `name=value` or `name:value` headers | none |
 | `OTEL_PROFILING_EXPORT_INTERVAL` | Collection interval in seconds | `60` |
 | `OTEL_PROFILING_MEMORY_ENABLED` | Includes heap profiles | `false` |
+
+The `http` exporter uses the existing multipart/pprof format. The `otlp` name is
+reserved for future OTLP Profiles support and is currently unsupported.
 
 The profiler emits a compatible multipart `pprof` layout. It is not an
 implementation of the OpenTelemetry Profiles signal.
