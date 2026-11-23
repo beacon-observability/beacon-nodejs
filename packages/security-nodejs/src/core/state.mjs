@@ -361,10 +361,10 @@ export class SecurityState {
         observed_at: new Date().toISOString(),
         execution_observation: 'invocation_attempt',
         precision: exact ? 'exact' : 'conservative',
-        trace_id: this.trace_id,
+        trace_id: current?.traceId || this.trace_id,
         server_span_id: this.server_span_id,
-        current_span_id: linked?.spanId || '',
-        trace_flags: this.server_span?.spanContext().traceFlags ?? 0,
+        span_id: current?.spanId || '',
+        trace_flags: current?.traceFlags ?? 0,
         sources,
         propagation: [...graph.values()],
         ranges: marks.map(({ source_id, start, end, exact, unit }) => ({

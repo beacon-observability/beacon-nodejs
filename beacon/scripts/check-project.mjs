@@ -155,9 +155,31 @@ check(
     'https://github.com/beacon-observability/beacon-security-spec' &&
     /^[0-9a-f]{40}$/.test(securityMigration.contract?.commit ?? '') &&
     securityMigration.contract?.schemaVersion === 2 &&
+    securityMigration.contract?.outputProfile === 'beacon-security-siem-v1' &&
     securityMigration.contract?.fingerprintVersion === 1,
   'Beacon Security contract must be pinned to schema version 2 and fingerprint version 1'
 );
+
+const securitySpec = Object.fromEntries(
+  readText('packages/security-nodejs/security-spec.properties')
+    .trim()
+    .split('\n')
+    .map(line => {
+      const index = line.indexOf('=');
+      return [line.slice(0, index), line.slice(index + 1)];
+    })
+);
+for (const [property, field] of [
+  ['repository', 'repository'],
+  ['revision', 'commit'],
+  ['schemaVersion', 'schemaVersion'],
+  ['fingerprintVersion', 'fingerprintVersion'],
+  ['outputProfile', 'outputProfile'],
+])
+  check(
+    securitySpec[property] === String(securityMigration.contract?.[field]),
+    `Security artifact provenance disagrees with migration lock: ${property}`
+  );
 
 const traceDemo = readJson('examples/trace-profile-demo/package.json');
 check(

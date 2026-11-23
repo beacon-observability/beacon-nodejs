@@ -432,7 +432,7 @@ async function runChild(framework, root, filePath) {
   const evidence = (await readFile(evidencePath, 'utf8'))
     .split(/\r?\n/)
     .filter(Boolean)
-    .map(line => JSON.parse(line));
+    .map(line => JSON.parse(JSON.parse(line).message));
   return { health, findings, evidence, lines: child.boundaryLines };
 }
 

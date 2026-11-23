@@ -18,7 +18,7 @@ const identity = {
 const schema = JSON.parse(
   await readFile(
     new URL(
-      './fixtures/spec/beacon-security-event-v2.schema.json',
+      './fixtures/spec/current/schemas/beacon-security-event-v2.schema.json',
       import.meta.url
     ),
     'utf8'
@@ -75,7 +75,7 @@ test('finding projection keeps request evidence while dropping v1 duplicate fiel
     component: { name: 'pg', version: '8.0.0', hash: 'abc', revision: 4 },
     trace_id: '1'.repeat(32),
     server_span_id: '2'.repeat(16),
-    current_span_id: '2'.repeat(16),
+    span_id: '2'.repeat(16),
     sources: [{ type: 'http.request.parameter', name: 'q' }],
     propagation: [],
     evidence_sampled: false,
@@ -240,7 +240,7 @@ test('exporter sends only finding and inventory events', async () => {
   const logged = [];
   const exporter = new Exporter(identity);
   exporter.explicitLogger = {
-    emit: event => logged.push(JSON.parse(event.body)),
+    emit: event => logged.push(JSON.parse(JSON.parse(event.body).message)),
   };
   try {
     assert.equal(

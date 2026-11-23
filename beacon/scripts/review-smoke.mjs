@@ -139,7 +139,7 @@ function logs() {
     })
     .flatMap(record => {
       try {
-        return [JSON.parse(record.body.stringValue)];
+        return [{ record, envelope: JSON.parse(record.body.stringValue) }];
       } catch {
         return [];
       }
@@ -404,16 +404,21 @@ try {
         code: null,
         signal: 'SIGTERM',
       });
-      assert.ok(
-        logs()
-          .slice(before)
-          .some(
-            event =>
-              event.event_name === 'beacon.security.finding' &&
-              event.rule === 'path_traversal' &&
-              event.trace_id
-          )
-      );
+      const finding = logs()
+        .slice(before)
+        .find(({ envelope }) => envelope.event_class === 'security_finding');
+      assert.ok(finding, 'shutdown must export the pending SIEM finding');
+      const { record, envelope } = finding;
+      const event = JSON.parse(envelope.message);
+      assert.equal(event.event_name, 'beacon.security.finding');
+      assert.equal(event.rule, 'path_traversal');
+      assert.equal(envelope.event_id, event.occurrence_id);
+      assert.ok(event.trace_id);
+      assert.ok(event.span_id);
+      assert.equal(envelope.trace_id, event.trace_id);
+      assert.equal(envelope.span_id, event.span_id);
+      assert.equal(record.traceId, event.trace_id);
+      assert.equal(record.spanId, event.span_id);
     } finally {
       request.destroy();
     }

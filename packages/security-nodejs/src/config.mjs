@@ -98,6 +98,7 @@ export function identity() {
   if (cachedIdentity) return cachedIdentity;
   const service = {};
   const accepted = new Set([
+    'tenant.id',
     'service.name',
     'service.version',
     'service.namespace',

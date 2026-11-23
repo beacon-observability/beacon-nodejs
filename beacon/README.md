@@ -73,7 +73,9 @@ The Beacon Security workspace:
 - models bounded flows from selected HTTP inputs to SQL, command, outbound
   HTTP, and file sinks;
 - publishes request findings and periodic runtime dependency inventories through
-  OpenTelemetry Logs;
+  OpenTelemetry Logs; current source uses the SIEM v1 envelope with exact v2
+  evidence in `message` and detection-time `span_id` (a wire-format change from
+  released 2.0.x packages);
 - remains disabled by default and does not enable local files implicitly; and
 - requires Node.js 22.22.3+ or 24.11.1+ when enabled.
 

@@ -30,7 +30,7 @@ const identity = {
 const schema = JSON.parse(
   await readFile(
     new URL(
-      './fixtures/spec/beacon-security-event-v2.schema.json',
+      './fixtures/spec/current/schemas/beacon-security-event-v2.schema.json',
       import.meta.url
     ),
     'utf8'
@@ -190,7 +190,10 @@ for (const fragments of [undefined, ['12', '1 OR 1=1', '14']]) {
       await exporter.close(5000);
       await provider.forceFlush();
       const findings = received
-        .map(log => ({ log, event: JSON.parse(log.body.stringValue) }))
+        .map(log => ({
+          log,
+          event: JSON.parse(JSON.parse(log.body.stringValue).message),
+        }))
         .filter(({ event }) => event.event_name === 'beacon.security.finding');
       assert.equal(
         findings.length,
@@ -198,7 +201,8 @@ for (const fragments of [undefined, ['12', '1 OR 1=1', '14']]) {
         JSON.stringify({
           counters: exporter.counters,
           received: received.map(
-            log => JSON.parse(log.body.stringValue).event_name
+            log =>
+              JSON.parse(JSON.parse(log.body.stringValue).message).event_name
           ),
         })
       );
@@ -228,10 +232,11 @@ for (const fragments of [undefined, ['12', '1 OR 1=1', '14']]) {
         for (const { event } of findings)
           assert.equal(event.attack_evidence.outcome, undefined);
       }
-      assert.deepEqual(
-        findings.map(({ log }) => log.traceId.toLowerCase()),
-        [1, 2, 3].map(i => i.toString(16).padStart(32, '0'))
-      );
+      // No active invocation span was installed by this direct state fixture.
+      for (const { log, event } of findings) {
+        assert.equal(event.span_id, undefined);
+        assert.ok(!log.spanId || /^0+$/.test(log.spanId));
+      }
     } finally {
       await exporter.close(1000);
       await provider.shutdown();
