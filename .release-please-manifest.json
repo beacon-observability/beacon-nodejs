@@ -73,7 +73,7 @@
   "packages/propagator-aws-xray": "3.0.0",
   "packages/propagator-aws-xray-lambda": "0.57.0",
   "packages/instrumentation-browser-navigation": "0.19.0",
-  "packages/profiler-nodejs": "2.0.3",
-  "packages/security-nodejs": "2.0.3",
-  "packages/nodejs": "2.0.3"
+  "packages/profiler-nodejs": "3.0.0",
+  "packages/security-nodejs": "3.0.0",
+  "packages/nodejs": "3.0.0"
 }
