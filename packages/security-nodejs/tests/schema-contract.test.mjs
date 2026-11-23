@@ -25,7 +25,7 @@ const vectors = JSON.parse(
 );
 const schema = JSON.parse(
   await readFile(
-    resolve(fixtures, 'beacon-security-event-v2.schema.json'),
+    resolve(fixtures, 'current/schemas/beacon-security-event-v2.schema.json'),
     'utf8'
   )
 );

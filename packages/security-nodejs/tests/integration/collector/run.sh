@@ -53,5 +53,6 @@ fi
 test -s "$result_dir/node-qa-logs.jsonl"
 grep -q 'beacon.security.finding' "$result_dir/node-qa-logs.jsonl"
 grep -q 'trace_id' "$result_dir/node-qa-logs.jsonl"
-grep -q 'server_span_id' "$result_dir/node-qa-logs.jsonl"
+grep -q 'span_id' "$result_dir/node-qa-logs.jsonl"
+node "$(dirname -- "$0")/verify-siem.mjs" "$result_dir/node-qa-logs.jsonl"
 echo "collector_logs=$result_dir/node-qa-logs.jsonl"

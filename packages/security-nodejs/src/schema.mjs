@@ -165,10 +165,9 @@ export function onlineEvent(value) {
       .map(key => [key, value.request[key]])
   );
   if (Object.keys(request).length) result.request = request;
-  for (const key of ['trace_id', 'server_span_id', 'precision'])
+  for (const key of ['trace_id', 'span_id', 'precision'])
     if (value[key] !== '' && value[key] != null) result[key] = value[key];
-  if (value.current_span_id && value.current_span_id !== value.server_span_id)
-    result.current_span_id = value.current_span_id;
+  if (value.span_id) result.trace_flags = value.trace_flags ?? 0;
   for (const key of [
     'sources',
     'propagation',
@@ -249,10 +248,8 @@ export function eventRecord(input, identity = {}) {
     event.server_span_id = event.trace_id
       ? traceId(event.server_span_id, 16)
       : '';
-    event.current_span_id = event.trace_id
-      ? traceId(event.current_span_id, 16)
-      : '';
-    event.trace_flags = event.server_span_id
+    event.span_id = event.trace_id ? traceId(event.span_id, 16) : '';
+    event.trace_flags = event.span_id
       ? (Number(event.trace_flags) || 0) & 0xff
       : 0;
     event.trace_availability = 'not_guaranteed_by_trace_id';

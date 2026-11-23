@@ -3,6 +3,7 @@ import { Worker } from 'node:worker_threads';
 import { join } from 'node:path';
 
 import { VERSION, flag, limit, text } from '../config.mjs';
+import { siemEvent } from '../siem.mjs';
 import { RuntimeLedger } from './ledger.mjs';
 
 function isRecord(value) {
@@ -384,10 +385,12 @@ export class Exporter {
         const entry = queue[0];
         let encoded;
         try {
-          encoded = this._encodeRecord(entry.event);
+          encoded = this._encodeRecord(entry.event, entry.contextEvent.service);
         } catch (error) {
           queue.shift();
-          throw error;
+          this._loss(`${channel}.record_too_large`, entry.event);
+          this._diagnostic(error);
+          continue;
         }
         if (
           !this._withinBudget(
@@ -433,10 +436,10 @@ export class Exporter {
     }
   }
 
-  _encodeRecord(event) {
+  _encodeRecord(event, resource = this.identity.service) {
     // emit() already owns a detached copy. Encoding must not clone its graph again.
     const original = event;
-    let encoded = encode(original);
+    let encoded = encode(siemEvent(encode(original), resource));
     if (Buffer.byteLength(encoded) <= this.maxBytes)
       return {
         event: original,
@@ -456,7 +459,7 @@ export class Exporter {
     reduced.collection_complete = false;
     reduced.truncated = true;
     reduced.truncation_reason = 'record_byte_limit';
-    encoded = encode(reduced);
+    encoded = encode(siemEvent(encode(reduced), resource));
     if (Buffer.byteLength(encoded) <= this.maxBytes)
       return {
         event: reduced,
@@ -558,9 +561,7 @@ export class Exporter {
 
   async _otelContext(event) {
     const traceId = asText(event.trace_id).toLowerCase();
-    const spanId = asText(
-      event.server_span_id || event.current_span_id
-    ).toLowerCase();
+    const spanId = asText(event.span_id).toLowerCase();
     const valid =
       /^[0-9a-f]{32}$/.test(traceId) &&
       /^[0-9a-f]{16}$/.test(spanId) &&

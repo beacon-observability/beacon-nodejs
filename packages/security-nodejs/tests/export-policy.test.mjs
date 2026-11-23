@@ -29,7 +29,7 @@ for (const setting of [undefined, 'false', 'invalid', 'true']) {
     const exporter = new Exporter(identity, 'policy', output);
     const logged = [];
     exporter.explicitLogger = {
-      emit: record => logged.push(JSON.parse(record.body)),
+      emit: record => logged.push(JSON.parse(JSON.parse(record.body).message)),
     };
     try {
       for (const status of ['no_evidence', 'unknown', 'suspected']) {
@@ -68,7 +68,7 @@ for (const setting of [undefined, 'false', 'invalid', 'true']) {
       const records = (await readFile(file, 'utf8'))
         .trim()
         .split('\n')
-        .map(JSON.parse);
+        .map(line => JSON.parse(JSON.parse(line).message));
       assert.deepEqual(records.map(e => e.occurrence_id).sort(), expected);
       assert.equal(
         exporter.delivery().counters['beacon.security.queued'],
@@ -96,7 +96,7 @@ for (const [fragment, status] of [
     const exporter = new Exporter(identity, 'upgrade');
     const logged = [];
     exporter.explicitLogger = {
-      emit: record => logged.push(JSON.parse(record.body)),
+      emit: record => logged.push(JSON.parse(JSON.parse(record.body).message)),
     };
     const state = new SecurityState(identity);
     exporter.ledger.begin(state);

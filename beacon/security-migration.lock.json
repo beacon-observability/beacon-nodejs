@@ -7,8 +7,9 @@
   },
   "contract": {
     "repository": "https://github.com/beacon-observability/beacon-security-spec",
-    "commit": "af1b834501210bfd197bf606163680129cc5d09b",
+    "commit": "4a30f30e1027568cfbcf8661079a072fc89bd825",
     "schemaVersion": 2,
+    "outputProfile": "beacon-security-siem-v1",
     "fingerprintVersion": 1
   }
 }

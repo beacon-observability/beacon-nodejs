@@ -1,4 +1,5 @@
 import { eventRecord, onlineEvent } from '../schema.mjs';
+import { siemEvent } from '../siem.mjs';
 import { limit } from '../config.mjs';
 
 export function dependencySnapshot(event, records, identity) {
@@ -38,13 +39,16 @@ export function dependencySnapshot(event, records, identity) {
     limit('beacon.security.evidence.max.bytes', 65536),
     limit('beacon.security.export.sbom.bytes-per-second', 262144)
   );
-  const overhead = Buffer.byteLength(JSON.stringify(envelope));
+  const overhead = Buffer.byteLength(
+    JSON.stringify(siemEvent(JSON.stringify(envelope), identity?.service))
+  );
   if (overhead > maximum)
     throw new Error('dependency_snapshot_envelope_exceeds_budget');
   const chunks = [[]];
   let bytes = overhead;
   for (const row of rows) {
-    const size = Buffer.byteLength(JSON.stringify(row));
+    // message is itself a JSON string, so account for its escaping too.
+    const size = Buffer.byteLength(JSON.stringify(JSON.stringify(row))) - 2;
     if (overhead + size > maximum)
       throw new Error('dependency_snapshot_item_exceeds_budget');
     let chunk = chunks.at(-1);

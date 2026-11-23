@@ -60,7 +60,7 @@ function event(id = 'evidence-controls-1') {
     observed_at: new Date().toISOString(),
     trace_id: 'a'.repeat(32),
     server_span_id: 'b'.repeat(16),
-    current_span_id: 'c'.repeat(16),
+    span_id: 'c'.repeat(16),
     trace_flags: 1,
     sources: [{ type: 'http.request.parameter', name: 'query.id' }],
     sink: {
@@ -181,7 +181,7 @@ test('Exporter drops on bounded queue overflow without blocking the caller', asy
     assert.equal(exporter.delivery().security_queue_depth, 0);
     assert.ok(exporter.ledger.health(exporter.delivery()).delivery_loss >= 1);
     const sent = emitted
-      .map(record => JSON.parse(String(record.body)))
+      .map(record => JSON.parse(JSON.parse(String(record.body)).message))
       .find(item => item.occurrence_id === 'queue-1');
     assert.equal(sent.sink.location, 'controls.test#query');
     results.push({
@@ -225,20 +225,23 @@ test('Exporter routes only finding and inventory with matching OTel sources', as
     );
     const records = emitted.slice(start, start + 2);
     for (const record of records) {
-      const body = JSON.parse(String(record.body));
+      const body = JSON.parse(JSON.parse(String(record.body)).message);
       assert.equal(record.attributes.source, body.source);
       assert.equal(record.eventName, body.event_name);
       assert.equal(record.attributes['event.name'], body.event_name);
       assert.equal(body.schema_version, 2);
     }
     assert.deepEqual(
-      records.map(record => JSON.parse(record.body).event_name),
+      records.map(
+        record => JSON.parse(JSON.parse(record.body).message).event_name
+      ),
       ['beacon.security.finding', 'beacon.security.sbom.inventory']
     );
     exporter.maxBytes = 100;
     assert.throws(
       () =>
         exporter._encodeRecord({
+          schema_version: 2,
           event_name: 'beacon.security.sbom.inventory',
           source: 'beacon_security_sbom',
           dependencies: [{ name: 'oversized', version: '1' }],
@@ -261,7 +264,7 @@ test('Exporter truncates UTF-8 finding evidence and drops records below the byte
   delete process.env.BEACON_SECURITY_EVIDENCE_FILE;
   try {
     await exporter.initialization;
-    exporter.maxBytes = 1024;
+    exporter.maxBytes = 1600;
     const oversized = { ...event('utf8-budget'), stack: ['é'.repeat(1024)] };
     const { onlineEvent } = await import('../src/schema.mjs');
     const projected = onlineEvent(oversized);
@@ -284,7 +287,7 @@ test('Exporter truncates UTF-8 finding evidence and drops records below the byte
     assert.equal(exporter.emit(oversized, { evidence: true }), true);
     await waitFor(() => emitted.length > start, 'utf8 truncated finding');
     const captured = emitted[start];
-    const capturedBody = JSON.parse(String(captured.body));
+    const capturedBody = JSON.parse(JSON.parse(String(captured.body)).message);
     assert.equal(capturedBody.occurrence_id, 'utf8-budget');
     assert.equal(capturedBody.truncated, true);
     assert.equal(capturedBody.collection_complete, false);
@@ -292,7 +295,7 @@ test('Exporter truncates UTF-8 finding evidence and drops records below the byte
     const { trace } = await import('@opentelemetry/api');
     const capturedSpan = trace.getSpanContext(captured.context);
     assert.equal(capturedSpan.traceId, oversized.trace_id);
-    assert.equal(capturedSpan.spanId, oversized.server_span_id);
+    assert.equal(capturedSpan.spanId, oversized.span_id);
     assert.equal(capturedSpan.traceFlags, oversized.trace_flags);
     await waitFor(
       () => (exporter.counters['beacon.security.file_written'] || 0) >= 1,
@@ -355,7 +358,8 @@ test('SBOM rate limiting defers queued inventories while findings keep flowing',
       () =>
         emitted.some(
           record =>
-            JSON.parse(record.body).occurrence_id === 'during-sbom-deferral'
+            JSON.parse(JSON.parse(record.body).message).occurrence_id ===
+            'during-sbom-deferral'
         ),
       'independent security queue'
     );
@@ -363,9 +367,11 @@ test('SBOM rate limiting defers queued inventories while findings keep flowing',
       () =>
         emitted.filter(
           record =>
-            JSON.parse(record.body).event_name ===
+            JSON.parse(JSON.parse(record.body).message).event_name ===
               'beacon.security.sbom.inventory' &&
-            JSON.parse(record.body).observed_at.startsWith('2026-10-27T09:20:')
+            JSON.parse(JSON.parse(record.body).message).observed_at.startsWith(
+              '2026-10-27T09:20:'
+            )
         ).length === 3,
       'all inventories delivered',
       4000
@@ -713,7 +719,7 @@ test('CLI controls run start/stop drain, pause/resume, revision rejection, and v
     )
       .split('\n')
       .filter(Boolean)
-      .map(line => JSON.parse(line));
+      .map(line => JSON.parse(JSON.parse(line).message));
     const evidenceSample = evidenceRecords.find(
       value => value.event_name === 'beacon.security.finding'
     );
