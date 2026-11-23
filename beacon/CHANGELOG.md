@@ -7,6 +7,8 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+- Adopted the verified OpenTelemetry source snapshot `c1b8c9ce1f3516e53b92`; Beacon product version remains unchanged.
+
 ## 2.0.3 - 2026-11-13
 
 - Accept `OTEL_PROFILING_EXPORTER=http` and `OTEL_PROFILING_ENDPOINT` for the
