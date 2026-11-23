@@ -7,7 +7,17 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
-- Adopted the verified OpenTelemetry source snapshot `c1b8c9ce1f3516e53b92`; Beacon product version remains unchanged.
+## 3.0.0 - 2026-11-23
+
+- Export Security findings and runtime inventories in SIEM v1 envelopes with
+  complete serialized v2 evidence in `message`. This is a breaking wire-format
+  change; consumers must parse `message` for detailed evidence and dependencies.
+- Correlate evidence and OTel LogRecords with the span active at detection via
+  `span_id`; stop exporting `server_span_id` and `current_span_id`.
+- Budget final escaped envelope bytes for export and inventory fragmentation,
+  retain deterministic inventory event IDs, and preserve fingerprint v1.
+- Pin Security contract `4a30f30e1027568cfbcf8661079a072fc89bd825` and align the
+  three Beacon packages and their telemetry identities at 3.0.0.
 
 ## 2.0.3 - 2026-11-13
 
