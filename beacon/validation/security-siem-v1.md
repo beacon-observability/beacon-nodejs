@@ -44,6 +44,7 @@ npm run test:conformance --workspace=@beacon-observability/security-nodejs
 npm run compile --workspace=@beacon-observability/profiler-nodejs
 npm run compile --workspace=@beacon-observability/nodejs
 npm test --workspace=@beacon-observability/nodejs
+node beacon/scripts/review-smoke.mjs
 npm run lint:prettier
 npm run lint:markdown
 ```
@@ -57,7 +58,9 @@ passed without relaxing their timeouts.
 Node.js `22.22.3` also passed 26 focused checks across schema conformance,
 SIEM vectors and byte budgets, detection span correlation, and exporter/runtime
 controls. Repository metadata, Prettier, Markdown, and diff-whitespace checks
-passed.
+passed. The complete preload/shutdown smoke also passed on Node.js
+`24.22.1` and `22.22.3`, including SIGTERM export of the SIEM finding before
+SDK Logs shutdown and matching evidence/envelope/OTLP invocation spans.
 
 The Collector check can be repeated with the integration fixtures in
 `packages/security-nodejs/tests/integration/collector/`; `verify-siem.mjs`
