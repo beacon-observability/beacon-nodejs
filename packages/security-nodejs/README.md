@@ -40,6 +40,43 @@ sinks. It transforms only application files under
 `BEACON_SECURITY_NODE_INCLUDE`; `node_modules`, Node built-ins, and explicitly
 excluded roots are not transformed.
 
+## Request coverage and unknown calls
+
+Business success and zero delivery drops do not establish complete Security
+analysis. `requests_incomplete` counts requests with at least one coverage gap;
+it is independent of `requests_started`, `requests_completed`, and delivery
+loss. Reconcile counter deltas per worker before aggregating cluster workers.
+
+`unmodeled_call_result` means a call returned a non-null value while its receiver
+or arguments carried tracked provenance, but no model or transformed function
+accounted for that result. It does not by itself identify the responsible library.
+Number's `isFinite`, `isInteger`, `isNaN`, and `isSafeInteger` predicates preserve
+provenance on their boolean results. Checking a number does not sanitize the
+original value or guarantee that subsequent calls are modeled.
+
+Redis is not a modeled Security adapter. In particular, a Redis `GET` with a
+request-derived key can produce `unmodeled_call_result`. Neither the key's taint
+nor the absence of a finding establishes the provenance or safety of the stored
+value. Node HTTP event callbacks and Promises are not categorically unsupported;
+coverage depends on the calls and data crossing their boundaries.
+
+To locate an unknown call, temporarily set
+`BEACON_SECURITY_CALL_DIAGNOSTICS_ENABLED=true` and enable the host OpenTelemetry
+diagnostic logger at warning level (for the Beacon preload, `OTEL_LOG_LEVEL=warn`).
+The diagnostic contains only the static transformed source location, including
+the file path and line/column, encoded as a JSON string. It does not inspect or
+log function names, arguments, return values, or request identifiers. Each process
+records at most 32 distinct locations, once each, with each location capped at
+1024 characters. Diagnostics are disabled by default, create no files, and do
+not change incomplete accounting. Restart the process to reset the location
+budget. Restrict diagnostic log access because source paths can reveal code
+layout.
+
+See [the issue #37 validation record](../../beacon/validation/issue-37.md) for the
+reduced mixed-workload regression and its limits. The original frozen 1.3.1 K6
+workload must be rerun before claiming its coverage or normal Security overhead
+has been validated.
+
 ## License
 
 Apache 2.0

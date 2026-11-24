@@ -7,6 +7,11 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+- Preserve provenance through numeric validation predicates without reporting
+  an unknown-call gap for those modeled checks. Add opt-in, bounded source-site
+  diagnostics for remaining unknown calls and a four-worker mixed-workload
+  regression; document the unsupported Redis result boundary tracked in #37.
+
 ## 3.0.0 - 2026-11-23
 
 - Export Security findings and runtime inventories in SIEM v1 envelopes with
