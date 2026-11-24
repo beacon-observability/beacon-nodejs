@@ -1,6 +1,25 @@
 import { current } from './runtime.mjs';
 import { p, isObject, binding } from './values.mjs';
 import { types, promisify } from 'node:util';
+import { diag } from '@opentelemetry/api';
+import { flag } from '../config.mjs';
+
+// A process-wide bound avoids per-request diagnostics under sustained load.
+// Only static transform locations are logged; never inspect the callee or data.
+const diagnosedCallSites = new Set();
+function diagnoseCall(location) {
+  if (!flag('beacon.security.call-diagnostics.enabled', false)) return;
+  const site = typeof location === 'string' ? location.slice(0, 1024) : '';
+  if (diagnosedCallSites.has(site) || diagnosedCallSites.size >= 32) return;
+  diagnosedCallSites.add(site);
+  try {
+    diag.warn(
+      'Beacon Security unmodeled_call_result at ' + JSON.stringify(site)
+    );
+  } catch {
+    // Diagnostics must not alter business values or coverage accounting.
+  }
+}
 
 const functions = new WeakMap(),
   models = new WeakMap(),
@@ -557,8 +576,10 @@ export function invoke(callee, args, location = '', construct = false) {
   ) {
     const carriesMarks = pair =>
       pair.m.length || state.record(pair.v)?.fields.size;
-    if (carriesMarks(receiver) || args.some(carriesMarks))
+    if (carriesMarks(receiver) || args.some(carriesMarks)) {
       state.gap('unmodeled_call_result');
+      diagnoseCall(location);
+    }
   }
   return p(value, marks);
 }

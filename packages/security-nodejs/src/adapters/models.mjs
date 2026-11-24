@@ -704,6 +704,12 @@ function registerConversionAndBufferBuiltins() {
     register(globalThis.Number, {
       after: primitiveConversionAfter('number.convert'),
     });
+  // These predicates inspect their argument without coercion. Preserve its
+  // provenance on the boolean result; a validation check does not sanitize it.
+  for (const name of ['isFinite', 'isInteger', 'isNaN', 'isSafeInteger'])
+    register(Number[name], {
+      after: primitiveConversionAfter(`number.${name}`),
+    });
   if (typeof Buffer !== 'undefined' && typeof Buffer.from === 'function')
     register(Buffer.from, { after: bufferFromAfter });
   if (

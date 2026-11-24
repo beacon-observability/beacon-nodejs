@@ -27,6 +27,50 @@ for (const rule of [
 
 installBuiltins();
 
+test('numeric predicates retain provenance without coercion or sanitization', () => {
+  const current = state();
+  run(current, () => {
+    for (const name of ['isFinite', 'isInteger', 'isNaN', 'isSafeInteger']) {
+      for (const value of [7, 1.5, NaN, Infinity, 2 ** 53, '7']) {
+        const marks = current.source(value, 'http.request.parameter', name);
+        const result = invokeValue(
+          Number[name],
+          Number,
+          [[value, marks]],
+          `numeric-predicates#${name}`
+        );
+        assert.equal(result.v, Number[name](value));
+        assert.ok(result.m.length, `${name} must retain input provenance`);
+        assert.ok(result.m.every(mark => mark.state === current.id));
+        assert.ok(result.m.every(mark => !mark.exact));
+        assert.equal(
+          invokeValue(Number[name], Number, [[value]], 'clean-predicate').m
+            .length,
+          0
+        );
+      }
+      let coercions = 0;
+      const input = {
+        valueOf() {
+          coercions++;
+          throw new Error('coercion');
+        },
+      };
+      current.putField(
+        input,
+        'value',
+        current.source('7', 'http.request.parameter', 'object')
+      );
+      assert.equal(
+        invokeValue(Number[name], Number, [[input]], 'object-predicate').v,
+        false
+      );
+      assert.equal(coercions, 0);
+    }
+    assert.deepEqual([...current.gaps], []);
+  });
+});
+
 const identity = Object.freeze({
   application_id: 'adapters-test',
   instance_id: 'adapters-test-instance',
