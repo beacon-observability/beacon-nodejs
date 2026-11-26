@@ -10,7 +10,7 @@ The output file must contain an actual OTLP logs export from the Node process.
 An application stdout line or a hand-written JSON fixture is not accepted as
 collector evidence. Keep the collector output path with the matrix result.
 
-The current verifier checks both the SIEM envelope and decoded v2 evidence
+The current verifier checks the compact v2 Body and native event metadata
 against the pinned schemas, including invocation `span_id` equality with the
 OTLP LogRecord. Run it against a saved collector file with:
 

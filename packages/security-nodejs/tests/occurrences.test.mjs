@@ -192,7 +192,7 @@ for (const fragments of [undefined, ['12', '1 OR 1=1', '14']]) {
       const findings = received
         .map(log => ({
           log,
-          event: JSON.parse(JSON.parse(log.body.stringValue).message),
+          event: JSON.parse(log.body.stringValue),
         }))
         .filter(({ event }) => event.event_name === 'beacon.security.finding');
       assert.equal(
@@ -201,23 +201,43 @@ for (const fragments of [undefined, ['12', '1 OR 1=1', '14']]) {
         JSON.stringify({
           counters: exporter.counters,
           received: received.map(
-            log =>
-              JSON.parse(JSON.parse(log.body.stringValue).message).event_name
+            log => JSON.parse(log.body.stringValue).event_name
           ),
         })
       );
+      const validateBody =
+        ajv.getSchema(
+          'https://github.com/beacon-observability/beacon-security-spec/raw/main/schemas/beacon-security-log-body-v1.schema.json'
+        ) ||
+        ajv.compile(
+          JSON.parse(
+            await readFile(
+              new URL(
+                './fixtures/spec/current/schemas/beacon-security-log-body-v1.schema.json',
+                import.meta.url
+              ),
+              'utf8'
+            )
+          )
+        );
       for (const { event } of findings)
         assert.equal(
-          validateEvent(event),
+          validateBody(event),
           true,
-          ajv.errorsText(validateEvent.errors)
+          ajv.errorsText(validateBody.errors)
         );
       assert.equal(
         new Set(findings.map(({ event }) => event.finding_id)).size,
         1
       );
       assert.equal(
-        new Set(findings.map(({ event }) => event.occurrence_id)).size,
+        new Set(
+          findings.map(
+            ({ log }) =>
+              log.attributes.find(attribute => attribute.key === 'event_id')
+                .value.stringValue
+          )
+        ).size,
         3
       );
       assert.deepEqual(

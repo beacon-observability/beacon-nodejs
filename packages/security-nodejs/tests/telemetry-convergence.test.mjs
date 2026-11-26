@@ -240,7 +240,7 @@ test('exporter sends only finding and inventory events', async () => {
   const logged = [];
   const exporter = new Exporter(identity);
   exporter.explicitLogger = {
-    emit: event => logged.push(JSON.parse(JSON.parse(event.body).message)),
+    emit: event => logged.push(JSON.parse(event.body)),
   };
   try {
     assert.equal(
@@ -269,7 +269,22 @@ test('exporter sends only finding and inventory events', async () => {
     assert.equal(logged[0].schema_version, 2);
     assert.equal(logged[0].event_name, 'beacon.security.sbom.inventory');
     assert.deepEqual(logged[0].dependencies, []);
-    assertSchema(logged[0]);
+    const validateBody = ajv.compile(
+      JSON.parse(
+        await readFile(
+          new URL(
+            './fixtures/spec/current/schemas/beacon-security-log-body-v1.schema.json',
+            import.meta.url
+          ),
+          'utf8'
+        )
+      )
+    );
+    assert.equal(
+      validateBody(logged[0]),
+      true,
+      ajv.errorsText(validateBody.errors)
+    );
   } finally {
     await exporter.close();
   }

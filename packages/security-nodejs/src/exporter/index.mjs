@@ -3,7 +3,7 @@ import { Worker } from 'node:worker_threads';
 import { join } from 'node:path';
 
 import { VERSION, flag, limit, text } from '../config.mjs';
-import { siemEvent } from '../siem.mjs';
+import { logRecord } from '../log-record.mjs';
 import { RuntimeLedger } from './ledger.mjs';
 
 function isRecord(value) {
@@ -385,7 +385,7 @@ export class Exporter {
         const entry = queue[0];
         let encoded;
         try {
-          encoded = this._encodeRecord(entry.event, entry.contextEvent.service);
+          encoded = this._encodeRecord(entry.event);
         } catch (error) {
           queue.shift();
           this._loss(`${channel}.record_too_large`, entry.event);
@@ -436,10 +436,10 @@ export class Exporter {
     }
   }
 
-  _encodeRecord(event, resource = this.identity.service) {
+  _encodeRecord(event) {
     // emit() already owns a detached copy. Encoding must not clone its graph again.
     const original = event;
-    let encoded = encode(siemEvent(encode(original), resource));
+    let encoded = logRecord(original).body;
     if (Buffer.byteLength(encoded) <= this.maxBytes)
       return {
         event: original,
@@ -459,7 +459,7 @@ export class Exporter {
     reduced.collection_complete = false;
     reduced.truncated = true;
     reduced.truncation_reason = 'record_byte_limit';
-    encoded = encode(siemEvent(encode(reduced), resource));
+    encoded = logRecord(reduced).body;
     if (Buffer.byteLength(encoded) <= this.maxBytes)
       return {
         event: reduced,
@@ -519,22 +519,23 @@ export class Exporter {
     if (!logger || typeof logger.emit !== 'function')
       throw new Error('otel_logs_unavailable');
     const context = await this._otelContext(contextEvent);
-    const logRecord = {
-      // OTel JS Logs accepts a TimeInput in milliseconds and performs the
-      // SDK-side conversion. Supplying nanoseconds here would multiply the
-      // timestamp once more in SDK encoders.
-      timestamp: Date.now(),
+    const bound = logRecord(event);
+    const record = {
+      timestamp: [
+        Number(BigInt(bound.time_unix_nano) / 1000000000n),
+        Number(BigInt(bound.time_unix_nano) % 1000000000n),
+      ],
       body,
       severityText: 'INFO',
       severityNumber: 9,
       attributes: {
         'event.name': asText(event.event_name),
-        source: event.source,
+        ...bound.attributes,
       },
       eventName: asText(event.event_name),
     };
-    if (context !== undefined) logRecord.context = context;
-    logger.emit(logRecord);
+    if (context !== undefined) record.context = context;
+    logger.emit(record);
   }
 
   async _getLogger() {

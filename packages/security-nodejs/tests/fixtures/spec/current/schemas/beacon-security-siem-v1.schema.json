@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/beacon-observability/beacon-security-spec/raw/main/schemas/beacon-security-siem-v1.schema.json",
   "title": "Beacon Security SIEM profile v1",
-  "description": "Security SIEM envelope with required process identity and preserved raw v2 evidence in message.",
+  "description": "Optional downstream SIEM projection, not a producer LogRecord Body. Preserves the received Body in message and maps native event metadata separately.",
   "type": "object",
   "required": [
     "time",
@@ -94,7 +94,7 @@
     "message": {
       "type": "string",
       "minLength": 1,
-      "description": "Exact original serialized Security v2 payload string. Validate decoded content separately against v2."
+      "description": "Exact received Body string. Validate decoded content against the declared log Body binding or historical complete v2 schema; native metadata is retained separately."
     },
     "instance_id": {
       "type": "string",

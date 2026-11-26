@@ -73,9 +73,8 @@ The Beacon Security workspace:
 - models bounded flows from selected HTTP inputs to SQL, command, outbound
   HTTP, and file sinks;
 - publishes request findings and periodic runtime dependency inventories through
-  OpenTelemetry Logs; current source uses the SIEM v1 envelope with exact v2
-  evidence in `message` and detection-time `span_id` (a wire-format change from
-  released 2.0.x packages);
+  OpenTelemetry Logs; current source uses compact v2 JSON Body with native event
+  time, `event_id` log attributes and detection-time `span_id`;
 - remains disabled by default and does not enable local files implicitly; and
 - requires Node.js 22.22.3+ or 24.11.1+ when enabled.
 
@@ -110,3 +109,19 @@ node beacon/scripts/zero-code-smoke.mjs
 Full upstream validation requires the matrices and services documented by the
 upstream project. Passing the profiler package tests alone does not validate the
 complete repository or an ingestion backend.
+
+## Current Security log binding
+
+Current source pins Security specification
+`d9d76e5a41d974d294bb596e06918bb954319bf6` and output profile
+`beacon-security-log-body-v1`. Each OTel LogRecord Body is compact single-line v2
+JSON. Only `observed_at` and `occurrence_id` move out of Body: event time uses the
+native timestamp, and occurrence identity uses log attribute `event_id`.
+`source` stays in Body and attributes. All remaining fields retain their original
+paths; there is no SIEM envelope or `message` wrapper. Inventory IDs are computed
+from the original logical event before compaction. Retransmissions retain time
+and identity. Body byte budgets and multipart planning use the final UTF-8 JSON.
+This source change does not establish acceptance for previously published releases.
+
+Body-only diagnostic files omit event time and occurrence ID; retain native log
+metadata separately when those values are required.

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
-import { siemEvent } from '../../../src/siem.mjs';
 
 const ajv = new Ajv2020({
   strict: true,
@@ -14,18 +13,10 @@ const schemaRoot = new URL(
   '../../fixtures/spec/current/schemas/',
   import.meta.url
 );
-const envelopeSchema = ajv.compile(
-  JSON.parse(
-    await readFile(
-      new URL('beacon-security-siem-v1.schema.json', schemaRoot),
-      'utf8'
-    )
-  )
-);
 const evidenceSchema = ajv.compile(
   JSON.parse(
     await readFile(
-      new URL('beacon-security-event-v2.schema.json', schemaRoot),
+      new URL('beacon-security-log-body-v1.schema.json', schemaRoot),
       'utf8'
     )
   )
@@ -38,40 +29,29 @@ for (const line of input.trim().split('\n')) {
     for (const scope of resource.scopeLogs || []) {
       if (scope.scope?.name !== 'io.beacon.security') continue;
       for (const log of scope.logRecords || []) {
-        const envelope = JSON.parse(log.body.stringValue);
-        assert.equal(
-          envelopeSchema(envelope),
-          true,
-          ajv.errorsText(envelopeSchema.errors)
-        );
-        const evidence = JSON.parse(envelope.message);
+        const evidence = JSON.parse(log.body.stringValue);
         assert.equal(
           evidenceSchema(evidence),
           true,
           ajv.errorsText(evidenceSchema.errors)
         );
-        assert.deepEqual(
-          envelope,
-          siemEvent(envelope.message, {
-            'service.name': envelope.service,
-            'tenant.id': envelope.tenant_id,
-          })
-        );
+        assert.ok(!/[\r\n]/.test(log.body.stringValue));
+        assert.ok(BigInt(log.timeUnixNano) > 0n);
         assert.equal(log.severityNumber, 9);
         const attributes = Object.fromEntries(
           (log.attributes || []).map(item => [item.key, item.value.stringValue])
         );
-        assert.equal(attributes.source, envelope.source);
+        assert.equal(attributes.source, evidence.source);
         assert.equal(attributes['event.name'], evidence.event_name);
-        if (envelope.event_class === 'security_finding') {
+        assert.ok(attributes.event_id);
+        if (evidence.event_name === 'beacon.security.finding') {
           findings++;
           assert.ok(
-            envelope.span_id,
+            evidence.span_id,
             'real HTTP fixture must have an active invocation span'
           );
-          assert.equal(log.traceId.toLowerCase(), envelope.trace_id);
-          assert.equal(log.spanId.toLowerCase(), envelope.span_id);
-          assert.equal(envelope.span_id, evidence.span_id);
+          assert.equal(log.traceId.toLowerCase(), evidence.trace_id);
+          assert.equal(log.spanId.toLowerCase(), evidence.span_id);
         }
       }
     }
@@ -79,5 +59,5 @@ for (const line of input.trim().split('\n')) {
 }
 assert.ok(findings > 0, 'collector must receive real Security findings');
 console.log(
-  `Validated ${findings} collector finding(s): SIEM and v2 schemas, mapping, invocation span, INFO and source attributes`
+  `Validated ${findings} collector finding(s): compact Body schema, native metadata, invocation span, INFO and source attributes`
 );
