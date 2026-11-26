@@ -7,6 +7,9 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+- Validate native Security log metadata and compact v2 Body in the active-request
+  SIGTERM smoke test, retaining shutdown delivery and invocation span checks.
+
 - Preserve compact Security v2 JSON Body; move event time to native log metadata
   and occurrence identity to `event_id`, retaining fingerprint v1 and source.
 

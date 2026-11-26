@@ -155,7 +155,8 @@ check(
     'https://github.com/beacon-observability/beacon-security-spec' &&
     /^[0-9a-f]{40}$/.test(securityMigration.contract?.commit ?? '') &&
     securityMigration.contract?.schemaVersion === 2 &&
-    securityMigration.contract?.outputProfile === 'beacon-security-log-body-v1' &&
+    securityMigration.contract?.outputProfile ===
+      'beacon-security-log-body-v1' &&
     securityMigration.contract?.fingerprintVersion === 1,
   'Beacon Security contract must be pinned to schema version 2 and fingerprint version 1'
 );
