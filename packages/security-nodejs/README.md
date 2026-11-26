@@ -91,47 +91,26 @@ groups the issue; its `occurrence_id` identifies this request. Trace and span
 context belongs to this occurrence. Missing trace context does not suppress a
 finding, and a trace ID does not guarantee that a backend retained the trace.
 
-Current source exports the `beacon-security-siem-v1` envelope on both the OTel
-Logs route and optional evidence JSONL stream. The fifteen required string
-fields are `time`, `event_id`, `event_class`, `source`, `service`, `tenant_id`,
-`actor`, `ip`, `action`, `target`, `target_type`, `outcome`, `status`, `severity`,
-and `message`. `instance_id` is also retained. `message` is the exact serialized
-v2 evidence after sampling and declared truncation; consumers must parse it
-for `event_name`, `occurrence_id`, `observed_at`, dependencies, and detailed
-flow evidence. No legacy format switch or duplicate event is emitted.
+Current source exports compact single-line v2 JSON directly as the OTel Logs
+Body and optional evidence JSONL. `observed_at` moves to native event time and
+`occurrence_id` moves to log attribute `event_id`; other fields retain their
+original paths. `source` remains in both Body and attributes. Consumers parse Body
+once, with no SIEM envelope or `message` wrapper. Trace correlation uses
+`trace_id`, `span_id`, and integer `trace_flags`. `span_id` identifies the span
+active at detection; absent context is never fabricated.
 
-Available trace correlation uses `trace_id`, `span_id`, and integer
-`trace_flags` in both the envelope and evidence. `span_id` identifies the span
-active at detection, including when it is the HTTP server span. The LogRecord
-associates with that same invocation span. If none is active, no span is
-substituted. `server_span_id` and `current_span_id` are absent from output.
+Inventory IDs retain the deterministic SHA-256 algorithm over the original
+logical event's collection time and part index. Retransmissions retain time and
+identity. Record and rate byte budgets and inventory partitioning use final UTF-8
+Body bytes. Findings retain explicit truncation flags when evidence must be
+reduced. If the reduced Body cannot fit, export records delivery loss. Inventory
+rejects an unrepresentable dependency instead of silently omitting it.
 
-`service` uses the configured OTel `service.name`. `tenant_id` uses an explicitly
-configured `tenant.id` in `OTEL_RESOURCE_ATTRIBUTES`, otherwise `default`.
-This runtime has no verified principal or trusted proxy enrichment, so `actor`
-and `ip` are empty. Request headers never supply tenant identity. A receiving
-system must enforce tenant isolation; `default` is only an unspecified identity.
-Findings always use `outcome=unknown`, `status=info`, and
-`severity=informational`, irrespective of attack evidence or HTTP status.
-Inventory uses `outcome=success` for local collection only.
-
-Finding `event_id` is the occurrence ID and `target` is its stable finding ID.
-Inventory IDs are deterministic SHA-256 IDs over the contract's ordered JSON
-identity tuple, including collection time and part index. Inventory target is
-the process instance. Retransmissions retain IDs; later rounds and distinct
-parts do not collide. Fingerprint v1 is unchanged.
-
-Record and rate byte budgets include the final serialized envelope, escaped
-`message`, configured service/tenant values, and trace fields. Findings that
-exceed the record limit retain the existing explicit evidence truncation
-markers inside `message`; if even the reduced envelope cannot fit, it is
-rejected with delivery-loss accounting. Inventory planning budgets escaped
-bytes and rejects an unrepresentable dependency instead of omitting it.
-`message` preserves the evidence Body, not the complete OTLP transport record.
-
-This source change follows the exact contract revision recorded in
-`security-spec.properties`; previously released 2.0.x packages retain their
-original v2 Body until upgraded. It is a consumer-visible wire-format change.
+This follows the revision in `security-spec.properties`. The wire format differs
+from the SIEM envelopes in 3.0.0 and the complete v2 events in 2.0.x. Body-only
+diagnostic archives omit event time and occurrence ID; use OTel metadata when
+those values are required. Service and tenant configuration remain Resource
+attributes; no service or runtime maps are added to Body.
 
 `BEACON_SECURITY_FINDINGS_SAMPLE_SECONDS` (default `300`) controls full evidence
 sampling independently of occurrence delivery and trace sampling. A sampled-out
@@ -204,3 +183,19 @@ Detection, request deduplication, and stronger evidence upgrades still run; opti
 finding snapshots and span summaries can retain observations excluded from event export.
 This changes the previous default, which exported all three statuses. `no_evidence` remains
 a classification, not a safety verdict.
+
+## Current Security log binding
+
+Current source pins Security specification
+`d9d76e5a41d974d294bb596e06918bb954319bf6` and output profile
+`beacon-security-log-body-v1`. Each OTel LogRecord Body is compact single-line v2
+JSON. Only `observed_at` and `occurrence_id` move out of Body: event time uses the
+native timestamp, and occurrence identity uses log attribute `event_id`.
+`source` stays in Body and attributes. All remaining fields retain their original
+paths; there is no SIEM envelope or `message` wrapper. Inventory IDs are computed
+from the original logical event before compaction. Retransmissions retain time
+and identity. Body byte budgets and multipart planning use the final UTF-8 JSON.
+This source change does not establish acceptance for previously published releases.
+
+Body-only diagnostic files omit event time and occurrence ID; retain native log
+metadata separately when those values are required.

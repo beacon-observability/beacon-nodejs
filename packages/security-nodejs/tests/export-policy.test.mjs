@@ -29,7 +29,13 @@ for (const setting of [undefined, 'false', 'invalid', 'true']) {
     const exporter = new Exporter(identity, 'policy', output);
     const logged = [];
     exporter.explicitLogger = {
-      emit: record => logged.push(JSON.parse(JSON.parse(record.body).message)),
+      emit: record =>
+        logged.push({
+          ...JSON.parse(record.body),
+          ...(record.eventName === 'beacon.security.finding'
+            ? { occurrence_id: record.attributes.event_id }
+            : {}),
+        }),
     };
     try {
       for (const status of ['no_evidence', 'unknown', 'suspected']) {
@@ -68,8 +74,11 @@ for (const setting of [undefined, 'false', 'invalid', 'true']) {
       const records = (await readFile(file, 'utf8'))
         .trim()
         .split('\n')
-        .map(line => JSON.parse(JSON.parse(line).message));
-      assert.deepEqual(records.map(e => e.occurrence_id).sort(), expected);
+        .map(line => JSON.parse(line));
+      assert.deepEqual(
+        records.map(e => e.attack_evidence.status).sort(),
+        expected
+      );
       assert.equal(
         exporter.delivery().counters['beacon.security.queued'],
         expected.length
@@ -96,7 +105,13 @@ for (const [fragment, status] of [
     const exporter = new Exporter(identity, 'upgrade');
     const logged = [];
     exporter.explicitLogger = {
-      emit: record => logged.push(JSON.parse(JSON.parse(record.body).message)),
+      emit: record =>
+        logged.push({
+          ...JSON.parse(record.body),
+          ...(record.eventName === 'beacon.security.finding'
+            ? { occurrence_id: record.attributes.event_id }
+            : {}),
+        }),
     };
     const state = new SecurityState(identity);
     exporter.ledger.begin(state);

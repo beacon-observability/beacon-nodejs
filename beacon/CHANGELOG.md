@@ -7,6 +7,9 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+- Preserve compact Security v2 JSON Body; move event time to native log metadata
+  and occurrence identity to `event_id`, retaining fingerprint v1 and source.
+
 - Preserve provenance through numeric validation predicates without reporting
   an unknown-call gap for those modeled checks. Add opt-in, bounded source-site
   diagnostics for remaining unknown calls and a four-worker mixed-workload

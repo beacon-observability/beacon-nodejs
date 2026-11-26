@@ -6,6 +6,7 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 import { SbomInventory } from '../src/sbom/index.mjs';
+import { logRecord } from '../src/log-record.mjs';
 import { dependencySnapshot } from '../src/sbom/snapshot.mjs';
 
 async function fixture() {
@@ -201,7 +202,7 @@ test('compact snapshots split by encoded bytes and retain only loaded package id
     );
     assert.ok(parts.length > 1);
     for (const [index, part] of parts.entries()) {
-      assert.ok(Buffer.byteLength(JSON.stringify(part)) <= 2048);
+      assert.ok(Buffer.byteLength(logRecord(part).body) <= 2048);
       assert.equal(part.part_index, index);
       assert.equal(part.part_count, parts.length);
     }

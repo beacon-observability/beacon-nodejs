@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
+import { logRecord } from '../src/log-record.mjs';
 import { siemEvent } from '../src/siem.mjs';
 import { dependencySnapshot } from '../src/sbom/snapshot.mjs';
 import { Exporter } from '../src/exporter/index.mjs';
@@ -74,16 +75,16 @@ test('multipart planning budgets the escaped envelope and retains dependencies o
     assert.ok(parts.length > 1);
     const ids = new Set();
     for (const [index, part] of parts.entries()) {
-      const envelope = siemEvent(JSON.stringify(part), identity.service);
-      assert.ok(Buffer.byteLength(JSON.stringify(envelope)) <= 1300);
+      const envelope = logRecord(part);
+      assert.ok(Buffer.byteLength(envelope.body) <= 1300);
       assert.equal(part.part_index, index);
       assert.equal(part.part_count, parts.length);
       assert.equal(
-        envelope.event_id,
-        siemEvent(JSON.stringify(part), identity.service).event_id
+        envelope.attributes.event_id,
+        logRecord(part).attributes.event_id
       );
-      ids.add(envelope.event_id);
-      assert.equal(validate(envelope), true, ajv.errorsText(validate.errors));
+      ids.add(envelope.attributes.event_id);
+      assert.equal(JSON.parse(envelope.body).schema_version, 2);
     }
     assert.equal(ids.size, parts.length);
     const names = parts.flatMap(part => part.dependencies.map(row => row.name));

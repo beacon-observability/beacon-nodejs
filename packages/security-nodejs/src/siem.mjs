@@ -1,4 +1,4 @@
-// Project runtime-owned v2 evidence without reserializing message.
+// Optional historical SIEM reference, not the producer export format.
 // This internal producer boundary is not an arbitrary incoming-log validator.
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
