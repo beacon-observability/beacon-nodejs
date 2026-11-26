@@ -139,7 +139,7 @@ function logs() {
     })
     .flatMap(record => {
       try {
-        return [{ record, envelope: JSON.parse(record.body.stringValue) }];
+        return [{ record, event: JSON.parse(record.body.stringValue) }];
       } catch {
         return [];
       }
@@ -406,17 +406,38 @@ try {
       });
       const finding = logs()
         .slice(before)
-        .find(({ envelope }) => envelope.event_class === 'security_finding');
-      assert.ok(finding, 'shutdown must export the pending SIEM finding');
-      const { record, envelope } = finding;
-      const event = JSON.parse(envelope.message);
+        .find(({ event }) => event.event_name === 'beacon.security.finding');
+      assert.ok(finding, 'shutdown must export the pending Security finding');
+      const { record, event } = finding;
+      const attributes = Object.fromEntries(
+        (record.attributes || []).map(({ key, value }) => [
+          key,
+          value.stringValue,
+        ])
+      );
       assert.equal(event.event_name, 'beacon.security.finding');
       assert.equal(event.rule, 'path_traversal');
-      assert.equal(envelope.event_id, event.occurrence_id);
+      assert.equal(event.schema_version, 2);
+      assert.equal(attributes.source, event.source);
+      assert.equal(attributes['event.name'], event.event_name);
+      assert.ok(attributes.event_id);
+      assert.ok(BigInt(record.timeUnixNano) > 0n);
+      assert.ok(BigInt(record.timeUnixNano) <= 9223372036854775807n);
+      assert.equal(record.severityNumber, 9);
+      for (const field of [
+        'observed_at',
+        'occurrence_id',
+        'event_id',
+        'message',
+      ])
+        assert.equal(
+          Object.hasOwn(event, field),
+          false,
+          `${field} must not be in Body`
+        );
+      assert.doesNotMatch(record.body.stringValue, /[\r\n]/);
       assert.ok(event.trace_id);
       assert.ok(event.span_id);
-      assert.equal(envelope.trace_id, event.trace_id);
-      assert.equal(envelope.span_id, event.span_id);
       assert.equal(record.traceId, event.trace_id);
       assert.equal(record.spanId, event.span_id);
     } finally {
