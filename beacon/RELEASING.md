@@ -6,6 +6,22 @@ Beacon Node.js publishes fixed GitHub source releases and the Beacon-owned
 `@beacon-observability/security-nodejs` packages. Inherited OpenTelemetry
 packages retain their upstream identities and must not be published by Beacon.
 
+## Release note layout
+
+- Keep the GitHub Release title to `vX.Y.Z`; do not repeat the project/version
+  as an H1 in the body.
+- Use `Changes`, `Upgrade`, `Distribution`, and `Validation` H2 sections,
+  omitting sections that do not apply. Prefer short bullets and a small table
+  for breaking field migrations.
+- Keep each paragraph and list item on one physical line. Do not manually
+  hard-wrap prose for an 80-column editor: GitHub Release rendering can turn
+  those breaks into fragmented lines.
+- Keep consumer changes, defaults, rollback versions, component versions, and
+  validated scope explicit. Link full commit/digest values, implementation
+  history, and detailed validation receipts instead of embedding long blocks.
+- Review the rendered GitHub page after editing. Preserve published tags and
+  assets when changing release text.
+
 ## Version Rules
 
 - `beacon/version.properties` is the single manually maintained Beacon product
