@@ -7,6 +7,8 @@ the exact adopted OpenTelemetry commit is recorded in
 
 ## Unreleased
 
+## 4.0.0 - 2026-11-27
+
 - Validate native Security log metadata and compact v2 Body in the active-request
   SIGTERM smoke test, retaining shutdown delivery and invocation span checks.
 
